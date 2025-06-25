@@ -17,3 +17,5 @@ swagger/lib/
 paz_y_salvos_mid
 *.exe*
 .exe~
+go.mod
+go.sum
