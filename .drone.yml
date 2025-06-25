@@ -26,6 +26,7 @@ steps:
   settings:
     access_key:
       from_secret: AWS_ACCESS_KEY_ID
+    create_repository: true
     secret_key:
       from_secret: AWS_SECRET_ACCESS_KEY
     region:
@@ -53,6 +54,50 @@ steps:
     tags:
       - ${DRONE_COMMIT:0:7}
       - latest
+  when:
+    branch:
+      - master
+    event:
+      - push
+
+- name: deploy_ecs_service_release
+  image: joshdvir/drone-ecs-deploy
+  settings:
+    cluster: test
+    service: ${DRONE_REPO_NAME}_test
+    aws_region: ${AWS_REGION}
+    aws_access_key_id: ${AWS_ACCESS_KEY_ID}
+    aws_secret_access_key: ${AWS_SECRET_ACCESS_KEY}
+    image_tag: release
+  environment:
+    AWS_ACCESS_KEY_ID:
+      from_secret: AWS_ACCESS_KEY_ID
+    AWS_REGION:
+      from_secret: AWS_REGION
+    AWS_SECRET_ACCESS_KEY:
+      from_secret: AWS_SECRET_ACCESS_KEY
+  when:
+    branch:
+      - release/*
+    event:
+      - push
+
+- name: deploy_ecs_service_prod
+  image: joshdvir/drone-ecs-deploy
+  settings:
+    cluster: oas
+    service: ${DRONE_REPO_NAME}_prod
+    aws_region: ${AWS_REGION}
+    aws_access_key_id: ${AWS_ACCESS_KEY_ID}
+    aws_secret_access_key: ${AWS_SECRET_ACCESS_KEY}
+    image_tag: latest
+  environment:
+    AWS_ACCESS_KEY_ID:
+      from_secret: AWS_ACCESS_KEY_ID
+    AWS_REGION:
+      from_secret: AWS_REGION
+    AWS_SECRET_ACCESS_KEY:
+      from_secret: AWS_SECRET_ACCESS_KEY
   when:
     branch:
       - master
