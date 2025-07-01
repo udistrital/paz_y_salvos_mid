@@ -14,5 +14,197 @@
         }
     },
     "basePath": "/v1",
-    "paths": null
+    "paths": {
+        "/semaforo/": {
+            "get": {
+                "tags": [
+                    "semaforo"
+                ],
+                "description": "obtener todos los estudiantes",
+                "operationId": "SemaforoController.ObtenerEstudiantes",
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.SemaforoTable"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/semaforo/estudiante/{codigo}": {
+            "get": {
+                "tags": [
+                    "semaforo"
+                ],
+                "description": "Obtiene información del semáforo de un estudiante por código",
+                "operationId": "SemaforoController.ObtenerEstudiante",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "codigo",
+                        "description": "Código del estudiante",
+                        "required": true,
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.SemaforoTable"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "{object} requestresponse.APIResponse \"Parámetro 'codigo' es obligatorio\""
+                    },
+                    "404": {
+                        "description": "{object} requestresponse.APIResponse \"Estudiante no encontrado\""
+                    },
+                    "503": {
+                        "description": "{object} requestresponse.APIResponse \"Error al consultar el servicio externo\""
+                    }
+                }
+            }
+        },
+        "/semaforo/facultad/{id_secretario}": {
+            "get": {
+                "tags": [
+                    "semaforo"
+                ],
+                "description": "obtener estudiantes por facultad del secretario academico",
+                "operationId": "SemaforoController.ObtenerEstudiantesFacultad",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id_secretario",
+                        "description": "ID del secretario académico",
+                        "required": true,
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.SemaforoTable"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": ":id_secretario is empty"
+                    }
+                }
+            }
+        },
+        "/semaforo/proyecto/{id_coordinador}": {
+            "get": {
+                "tags": [
+                    "semaforo"
+                ],
+                "description": "obtener estudiantes por proyectos del coordinador",
+                "operationId": "SemaforoController.ObtenerEstudiantesProyecto",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id_coordinador",
+                        "description": "ID del coordinador",
+                        "required": true,
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.SemaforoTable"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": ":id_coordinador is empty"
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "models.SemaforoTable": {
+            "title": "SemaforoTable",
+            "type": "object",
+            "properties": {
+                "Academico": {
+                    "type": "boolean"
+                },
+                "AnioInsGrado": {
+                    "type": "number",
+                    "format": "double"
+                },
+                "Biblioteca": {
+                    "type": "boolean"
+                },
+                "Bienestar": {
+                    "type": "boolean"
+                },
+                "CodigoEstudiante": {
+                    "type": "number",
+                    "format": "double"
+                },
+                "Financiero": {
+                    "type": "boolean"
+                },
+                "Id": {
+                    "type": "integer",
+                    "format": "int64"
+                },
+                "Laboratorios": {
+                    "type": "boolean"
+                },
+                "NombreEstudiante": {
+                    "type": "string"
+                },
+                "NombreFacultad": {
+                    "type": "string"
+                },
+                "NombreProyecto": {
+                    "type": "string"
+                },
+                "Observacion": {
+                    "type": "string"
+                },
+                "Orc": {
+                    "type": "boolean"
+                },
+                "PerInsGrado": {
+                    "type": "number",
+                    "format": "double"
+                },
+                "Urelinter": {
+                    "type": "boolean"
+                }
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "semaforo",
+            "description": "SemaforoController operations for Semaforo\n"
+        }
+    ]
 }

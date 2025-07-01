@@ -11,9 +11,16 @@ import (
 	// "github.com/udistrital/paz_y_salvos_mid/controllers"
 
 	"github.com/astaxie/beego"
+	"github.com/udistrital/paz_y_salvos_mid/controllers"
 )
 
 func init() {
-	ns := beego.NewNamespace("/v1")
+	ns := beego.NewNamespace("/v1",
+
+		beego.NSNamespace("/semaforo",
+			beego.NSInclude(
+				&controllers.SemaforoController{},
+			),
+		))
 	beego.AddNamespace(ns)
 }
