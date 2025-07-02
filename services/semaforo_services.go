@@ -87,15 +87,77 @@ func ConsultarEstudiantesProyecto(id_coordinador string) requestresponse.APIResp
 		query += fmt.Sprintf("%d", id)
 	}
 	query += ",Activo:true"
-
-	fmt.Println("Consulta de semáforos:", query)
-
 	return obtenerSemaforos(query, "No se encontraron estudiantes activos para los proyectos del coordinador.")
 }
 
-func ConsultarEstudiantesFacultad(id_coordinador string) requestresponse.APIResponse {
-	query := fmt.Sprintf("/semaforo/?query=IdFacultadOikos:%d,Activo:true", id_coordinador)
-	return obtenerSemaforos(query, "No se encontraron estudiantes activos en la facultad.")
+func ConsultarEstudiantesFacultad(id_secretario string) requestresponse.APIResponse {
+	// 1. Consultar facultades del secretario
+	urlSec := beego.AppConfig.String("ProtocolAdmin") + "://" +
+		beego.AppConfig.String("UrlcrudWSO2") +
+		beego.AppConfig.String("NscrudAcademica") +
+		"/secretario_facultad/" + id_secretario
+
+	var resSec map[string]interface{}
+	if err := request.GetJsonWSO2(urlSec, &resSec); err != nil {
+		logs.Error("No se pudo obtener las facultades del secretario %s: %v", id_secretario, err)
+		return requestresponse.APIResponseDTO(false, 503, nil, "No se pudo consultar las facultades del secretario.")
+	}
+
+	var codigosCondor []string
+	if collection, ok := resSec["secretarioCollection"].(map[string]interface{}); ok {
+		if lista, ok := collection["secretario"].([]interface{}); ok {
+			for _, item := range lista {
+				if facultad, ok := item.(map[string]interface{}); ok {
+					if cod, ok := facultad["codigo_condor"].(string); ok {
+						codigosCondor = append(codigosCondor, cod)
+					}
+				}
+			}
+		}
+	}
+
+	if len(codigosCondor) == 0 {
+		return requestresponse.APIResponseDTO(false, 404, nil, "El secretario no tiene facultades asociadas.")
+	}
+
+	// 2. Homologar con servicio de homologación
+	var idsOikos []int
+	for _, cod := range codigosCondor {
+		urlHom := beego.AppConfig.String("ProtocolAdmin") + "://" +
+			beego.AppConfig.String("UrlcrudWSO2") +
+			beego.AppConfig.String("NscrudHomologacion") +
+			"/facultad_oikos_gedep/" + cod
+
+		var resHom map[string]interface{}
+		if err := request.GetJsonWSO2(urlHom, &resHom); err != nil {
+			logs.Warn("Error al consultar homologación para facultad %s: %v", cod, err)
+			continue
+		}
+
+		if hom, ok := resHom["homologacion"].(map[string]interface{}); ok {
+			if idStr, ok := hom["id_oikos"].(string); ok {
+				if idInt, err := strconv.Atoi(idStr); err == nil {
+					idsOikos = append(idsOikos, idInt)
+				}
+			}
+		}
+	}
+
+	if len(idsOikos) == 0 {
+		return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron facultades oikos para el secretario.")
+	}
+
+	// 3. Construir query con OR
+	query := "?query=IdFacultadOikos:"
+	for i, id := range idsOikos {
+		if i > 0 {
+			query += "|"
+		}
+		query += fmt.Sprintf("%d", id)
+	}
+	query += ",Activo:true"
+
+	return obtenerSemaforos(query, "No se encontraron estudiantes activos en las facultades del secretario.")
 }
 
 func obtenerSemaforos(query, notFoundMsg string) requestresponse.APIResponse {
