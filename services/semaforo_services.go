@@ -13,12 +13,12 @@ import (
 )
 
 func ConsultarEstudiante(codigo string) requestresponse.APIResponse {
-	query := "?query=CodigoEstudiante:" + codigo + ",Activo:true"
+	query := "?query=CodigoEstudiante:" + codigo + ",Activo:true&limit=-1"
 	return obtenerSemaforos(query, "No se encontró información del estudiante.")
 }
 
 func ConsultarEstudiantes() requestresponse.APIResponse {
-	query := "?query=Activo:true"
+	query := "?query=Activo:true&limit=-1"
 	return obtenerSemaforos(query, "No se encontraron estudiantes activos.")
 }
 
@@ -86,7 +86,7 @@ func ConsultarEstudiantesProyecto(id_coordinador string) requestresponse.APIResp
 		}
 		query += fmt.Sprintf("%d", id)
 	}
-	query += ",Activo:true"
+	query += ",Activo:true&limit=-1"
 	return obtenerSemaforos(query, "No se encontraron estudiantes activos para los proyectos del coordinador.")
 }
 
@@ -155,7 +155,7 @@ func ConsultarEstudiantesFacultad(id_secretario string) requestresponse.APIRespo
 		}
 		query += fmt.Sprintf("%d", id)
 	}
-	query += ",Activo:true"
+	query += ",Activo:true&limit=-1"
 
 	return obtenerSemaforos(query, "No se encontraron estudiantes activos en las facultades del secretario.")
 }
@@ -236,7 +236,7 @@ func consultarDataSemaforo(semaforos []models.Semaforo) []models.SemaforoTable {
 			}
 		}
 
-		// 3. Nombre del proyecto
+		// // 3. Nombre del proyecto
 		urlProj := beego.AppConfig.String("ProtocolAdmin") + "://" +
 			beego.AppConfig.String("UrlcrudOikos") +
 			"dependencia/" + fmt.Sprintf("%d", s.IdProyectoOikos)
