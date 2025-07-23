@@ -60,46 +60,34 @@ steps:
     event:
       - push
 
-- name: deploy_ecs_service_release
-  image: joshdvir/drone-ecs-deploy
-  settings:
-    cluster: test
-    service: ${DRONE_REPO_NAME}_test
-    aws_region: ${AWS_REGION}
-    aws_access_key_id: ${AWS_ACCESS_KEY_ID}
-    aws_secret_access_key: ${AWS_SECRET_ACCESS_KEY}
-    image_tag: release
+- name: update_ecs_service
+  image: amazon/aws-cli:latest
   environment:
     AWS_ACCESS_KEY_ID:
       from_secret: AWS_ACCESS_KEY_ID
-    AWS_REGION:
-      from_secret: AWS_REGION
     AWS_SECRET_ACCESS_KEY:
       from_secret: AWS_SECRET_ACCESS_KEY
+    AWS_DEFAULT_REGION:
+      from_secret: AWS_REGION
+  commands:
+    - case ${DRONE_BRANCH} in
+      master)
+      SUFFIX=prod
+      CLUSTER=oas
+        ;;
+      *)
+      SUFFIX=test
+      CLUSTER=test
+        ;;
+      esac
+    - aws ecs update-service
+      --cluster $${CLUSTER}
+      --service $${DRONE_REPO_NAME}_$${SUFFIX}
+      --force-new-deployment
+      --query "service.deployments[0].id"
   when:
     branch:
       - release/*
-    event:
-      - push
-
-- name: deploy_ecs_service_prod
-  image: joshdvir/drone-ecs-deploy
-  settings:
-    cluster: oas
-    service: ${DRONE_REPO_NAME}_prod
-    aws_region: ${AWS_REGION}
-    aws_access_key_id: ${AWS_ACCESS_KEY_ID}
-    aws_secret_access_key: ${AWS_SECRET_ACCESS_KEY}
-    image_tag: latest
-  environment:
-    AWS_ACCESS_KEY_ID:
-      from_secret: AWS_ACCESS_KEY_ID
-    AWS_REGION:
-      from_secret: AWS_REGION
-    AWS_SECRET_ACCESS_KEY:
-      from_secret: AWS_SECRET_ACCESS_KEY
-  when:
-    branch:
       - master
     event:
       - push
