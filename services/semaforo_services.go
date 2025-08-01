@@ -92,10 +92,15 @@ func ConsultarEstudiantesProyecto(id_coordinador string) requestresponse.APIResp
 
 func ConsultarEstudiantesFacultad(id_secretario string) requestresponse.APIResponse {
 	// 1. Consultar facultades del secretario
+	// urlSec := beego.AppConfig.String("ProtocolAdmin") + "://" +
+	// 	beego.AppConfig.String("UrlcrudWSO2") +
+	// 	beego.AppConfig.String("NscrudAcademica") +
+	// 	"/facultad_secretaria/" + id_secretario
+
 	urlSec := beego.AppConfig.String("ProtocolAdmin") + "://" +
 		beego.AppConfig.String("UrlcrudWSO2") +
-		beego.AppConfig.String("NscrudAcademica") +
-		"/secretario_facultad/" + id_secretario
+		"academica_pruebas" +
+		"/facultad_secretaria/" + id_secretario
 
 	var resSec map[string]interface{}
 	if err := request.GetJsonWSO2(urlSec, &resSec); err != nil {
@@ -104,11 +109,11 @@ func ConsultarEstudiantesFacultad(id_secretario string) requestresponse.APIRespo
 	}
 
 	var codigosCondor []string
-	if collection, ok := resSec["secretarioCollection"].(map[string]interface{}); ok {
-		if lista, ok := collection["secretario"].([]interface{}); ok {
-			for _, item := range lista {
-				if facultad, ok := item.(map[string]interface{}); ok {
-					if cod, ok := facultad["codigo_condor"].(string); ok {
+	if facultades, ok := resSec["facultades"].(map[string]interface{}); ok {
+		if secretaria, ok := facultades["secretaria"].([]interface{}); ok {
+			for _, item := range secretaria {
+				if fac, ok := item.(map[string]interface{}); ok {
+					if cod, ok := fac["SEC_DEP_COD"].(string); ok {
 						codigosCondor = append(codigosCondor, cod)
 					}
 				}
