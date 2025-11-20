@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
+	"github.com/udistrital/paz_y_salvos_mid/helpers"
 	"github.com/udistrital/paz_y_salvos_mid/models"
 	"github.com/udistrital/utils_oas/request"
 	"github.com/udistrital/utils_oas/requestresponse"
@@ -163,6 +165,156 @@ func ConsultarEstudiantesFacultad(id_secretario string) requestresponse.APIRespo
 	query += ",Activo:true&limit=-1"
 
 	return obtenerSemaforos(query, "No se encontraron estudiantes activos en las facultades del secretario.")
+}
+
+func ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab string) requestresponse.APIResponse {
+
+	// 1. Consultar de que dependencias es jefe
+	// Obtener la fecha actual en formato YYYY-MM-DD
+	fechaActual := time.Now().Format("2006-01-02")
+
+	urlJefe := beego.AppConfig.String("ProtocolAdmin") + "://" +
+		beego.AppConfig.String("UrlcrudCore") +
+		"/jefe_dependencia?query=TerceroId:" + id_coordinador_lab +
+		",FechaFin__gte:" + fechaActual +
+		",FechaInicio__lte:" + fechaActual
+
+	var resJefe []models.JefeDependencia
+	if err := request.GetJson(urlJefe, &resJefe); err != nil {
+		logs.Error("No se pudo obtener las dependencias del jefe %s: %v", id_coordinador_lab, err)
+		return requestresponse.APIResponseDTO(false, 503, nil, "No se pudo consultar las dependencias del jefe de laboratorios.")
+	}
+
+	var dependenciasConNombre []map[string]interface{}
+	for _, jefe := range resJefe {
+		urlDep := beego.AppConfig.String("ProtocolAdmin") + "://" +
+			beego.AppConfig.String("UrlcrudOikos") +
+			"dependencia/" + fmt.Sprintf("%d", jefe.DependenciaId)
+
+		var resDep map[string]interface{}
+		if err := request.GetJson(urlDep, &resDep); err != nil {
+			logs.Warn("No se pudo obtener información de la dependencia %d: %v", jefe.DependenciaId, err)
+			continue
+		}
+
+		nombre := ""
+		if n, ok := resDep["Nombre"].(string); ok {
+			nombre = n
+		}
+
+		dependenciasConNombre = append(dependenciasConNombre, map[string]interface{}{
+			"DependenciaId": jefe.DependenciaId,
+			"Nombre":        nombre,
+		})
+	}
+
+	// Filtrar solo dependencias cuyo nombre contiene "laboratorio" (ignorando mayúsculas/minúsculas)
+	var laboratorios []map[string]interface{}
+	for _, dep := range dependenciasConNombre {
+		if nombre, ok := dep["Nombre"].(string); ok {
+			if len(nombre) > 0 && (helpers.ContainsIgnoreCase(nombre, "laboratorio") || helpers.ContainsIgnoreCase(nombre, "laboratorios")) {
+				laboratorios = append(laboratorios, dep)
+			}
+		}
+	}
+
+	// Si no hay dependencias de laboratorios, probablemente es el decano de la facultad
+	if len(laboratorios) == 0 {
+		fmt.Println("No se encontraron dependencias de laboratorios. Probablemente es el decano de la facultad.")
+		// Se usa el id obtenido en dependencias con nombre para armar el query y obtener el semaforo
+		var idsDependencias []int
+		for _, dep := range dependenciasConNombre {
+			if id, ok := dep["DependenciaId"].(int); ok {
+				idsDependencias = append(idsDependencias, id)
+			}
+		}
+		if len(idsDependencias) == 0 {
+			return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron dependencias asociadas al decano.")
+		}
+		query := "?query=IdFacultadOikos:"
+		for i, id := range idsDependencias {
+			if i > 0 {
+				query += "|"
+			}
+			query += fmt.Sprintf("%d", id)
+		}
+		query += ",Activo:true&limit=-1"
+		fmt.Println("Query para decano:", query)
+		return obtenerSemaforos(query, "No se encontraron estudiantes activos en las facultades asociadas al decano.")
+
+	} else {
+		// Se consulta la dependencia padre de las dependencias obtenidas
+
+	}
+
+	// Imprimir las dependencias de laboratorios encontradas
+	laboratoriosJSON, err := json.MarshalIndent(laboratorios, "", "  ")
+	if err != nil {
+		logs.Error("Error al serializar laboratorios a JSON: %v", err)
+	} else {
+		fmt.Println("Dependencias de laboratorios encontradas:", string(laboratoriosJSON))
+	}
+
+	// Imprimir el JSON de las dependencias obtenidas
+	// dependenciasJSON, err := json.MarshalIndent(dependencias, "", "  ")
+	// if err != nil {
+	// 	logs.Error("Error al serializar dependencias a JSON: %v", err)
+	// } else {
+	// 	fmt.Println("Dependencias obtenidas:", string(dependenciasJSON))
+	// }
+
+	// if len(dependencias) == 0 {
+	// 	return requestresponse.APIResponseDTO(false, 404, nil, "El coordinador de laboratorios no tiene dependencias asociadas como jefe en la fecha actual.")
+	// }
+
+	// 2. Validar si las dependencias son laboratorios y obtener facultades padre
+	// var facultadesOikos []int
+	// for _, dep := range dependencias {
+	// 	// Consultar información de la dependencia
+	// 	urlDep := beego.AppConfig.String("ProtocolAdmin") + "://" +
+	// 		beego.AppConfig.String("UrlcrudOikos") +
+	// 		"dependencia/" + fmt.Sprintf("%d", dep.DependenciaId)
+
+	// 	var resDep map[string]interface{}
+	// 	if err := request.GetJson(urlDep, &resDep); err != nil {
+	// 		logs.Warn("No se pudo obtener información de la dependencia %d: %v", dep.DependenciaId, err)
+	// 		continue
+	// 	}
+
+	// 	// Verificar si es un laboratorio (por nombre o tipo)
+	// 	if nombre, ok := resDep["Nombre"].(string); ok {
+	// 		logs.Info("Dependencia encontrada: %s (ID: %d)", nombre, dep.DependenciaId)
+
+	// 		// Buscar dependencia padre (facultad)
+	// 		if dependenciaPadreId, ok := resDep["DependenciaTipoDependenciaId"].(map[string]interface{}); ok {
+	// 			if dependencia, ok := dependenciaPadreId["DependenciaId"].(map[string]interface{}); ok {
+	// 				if padreId, ok := dependencia["Id"].(float64); ok {
+	// 					// Convertir a int y agregar a la lista de facultades
+	// 					facultadesOikos = append(facultadesOikos, int(padreId))
+	// 					logs.Info("Facultad padre encontrada: ID %d para laboratorio %s", int(padreId), nombre)
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	// if len(facultadesOikos) == 0 {
+	// 	return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron facultades asociadas a los laboratorios del coordinador.")
+	// }
+
+	// // 3. Construir query para consultar estudiantes con pendientes de laboratorios
+	// query := "?query=IdFacultadOikos:"
+	// for i, id := range facultadesOikos {
+	// 	if i > 0 {
+	// 		query += "|"
+	// 	}
+	// 	query += fmt.Sprintf("%d", id)
+	// }
+	// query += ",Laboratorios:false,Activo:true&limit=-1"
+
+	// return obtenerSemaforos(query, "No se encontraron estudiantes con pendientes de laboratorios en las facultades asociadas.")
+
+	return requestresponse.APIResponseDTO(false, 503, nil, "Función no implementada. Consultar con el equipo de desarrollo.")
 }
 
 func obtenerSemaforos(query, notFoundMsg string) requestresponse.APIResponse {

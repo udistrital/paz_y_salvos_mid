@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/astaxie/beego"
 	"github.com/udistrital/utils_oas/requestresponse"
@@ -28,4 +29,8 @@ func GetPathParamOrError(c *beego.Controller, param string) (string, bool) {
 		return "", false
 	}
 	return val, true
+}
+
+func ContainsIgnoreCase(s, substr string) bool {
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
