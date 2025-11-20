@@ -18,6 +18,7 @@ func (c *SemaforoController) URLMapping() {
 	c.Mapping("ObtenerEstudiantes", c.ObtenerEstudiantes)
 	c.Mapping("ObtenerEstudiantesProyecto", c.ObtenerEstudiantesProyecto)
 	c.Mapping("ObtenerEstudiantesFacultad", c.ObtenerEstudiantesFacultad)
+	c.Mapping("ObtenerEstudiantesFacultadLaboratorios", c.ObtenerEstudiantesFacultadLaboratorios)
 }
 
 // ObtenerEstudiante ...
@@ -78,6 +79,22 @@ func (c *SemaforoController) ObtenerEstudiantesFacultad() {
 
 	if id_secretario, ok := helpers.GetPathParamOrError(&c.Controller, "id_secretario"); ok {
 		resp := services.ConsultarEstudiantesFacultad(id_secretario)
+		helpers.RenderResponse(&c.Controller, resp)
+	}
+}
+
+// ObtenerEstudiantesFacultadLaboratorios ...
+// @Title ObtenerEstudiantesFacultadLaboratorios
+// @Description obtener estudiantes por facultad del coordinador de laboratorios
+// @Param	id_coordinador_lab	path 	int	true	"ID del coordinador de laboratorios"
+// @Success 200 {object} []models.SemaforoTable
+// @Failure 400 :id_coordinador_lab is empty
+// @router /facultad/laboratorios/:id_coordinador_lab [get]
+func (c *SemaforoController) ObtenerEstudiantesFacultadLaboratorios() {
+	defer errorhandler.HandlePanic(&c.Controller)
+
+	if id_coordinador_lab, ok := helpers.GetPathParamOrError(&c.Controller, "id_coordinador_lab"); ok {
+		resp := services.ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab)
 		helpers.RenderResponse(&c.Controller, resp)
 	}
 }

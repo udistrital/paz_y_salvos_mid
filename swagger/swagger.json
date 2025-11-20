@@ -77,6 +77,39 @@
                 }
             }
         },
+        "/semaforo/facultad/laboratorios/{id_coordinador_lab}": {
+            "get": {
+                "tags": [
+                    "semaforo"
+                ],
+                "description": "obtener estudiantes por facultad del coordinador de laboratorios",
+                "operationId": "SemaforoController.ObtenerEstudiantesFacultadLaboratorios",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id_coordinador_lab",
+                        "description": "ID del coordinador de laboratorios",
+                        "required": true,
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.SemaforoTable"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": ":id_coordinador_lab is empty"
+                    }
+                }
+            }
+        },
         "/semaforo/facultad/{id_secretario}": {
             "get": {
                 "tags": [
