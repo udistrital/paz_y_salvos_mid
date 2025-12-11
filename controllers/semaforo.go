@@ -25,6 +25,8 @@ func (c *SemaforoController) URLMapping() {
 // @Title ObtenerEstudiante
 // @Description Obtiene información del semáforo de un estudiante por código
 // @Param	codigo	path	int	true	"Código del estudiante"
+// @Param	limit	query	int	false	"Número de registros por página"
+// @Param	offset	query	int	false	"Número de registros a saltar"
 // @Success 200 {array} models.SemaforoTable
 // @Failure 400 {object} requestresponse.APIResponse "Parámetro 'codigo' es obligatorio"
 // @Failure 404 {object} requestresponse.APIResponse "Estudiante no encontrado"
@@ -34,7 +36,9 @@ func (c *SemaforoController) ObtenerEstudiante() {
 	defer errorhandler.HandlePanic(&c.Controller)
 
 	if codigo, ok := helpers.GetPathParamOrError(&c.Controller, "codigo"); ok {
-		resp := services.ConsultarEstudiante(codigo)
+		limit, _ := c.GetInt("limit", 10)
+		offset, _ := c.GetInt("offset", 0)
+		resp := services.ConsultarEstudiante(codigo, limit, offset)
 		helpers.RenderResponse(&c.Controller, resp)
 	}
 }
@@ -42,13 +46,17 @@ func (c *SemaforoController) ObtenerEstudiante() {
 // ObtenerEstudiantes ...
 // @Title ObtenerEstudiantes
 // @Description obtener todos los estudiantes
+// @Param	limit	query	int	false	"Número de registros por página"
+// @Param	offset	query	int	false	"Número de registros a saltar"
 // @Success 200 {object} []models.SemaforoTable
 // @Failure 503
 // @router / [get]
 func (c *SemaforoController) ObtenerEstudiantes() {
 	defer errorhandler.HandlePanic(&c.Controller)
 
-	resp := services.ConsultarEstudiantes()
+	limit, _ := c.GetInt("limit", 10)
+	offset, _ := c.GetInt("offset", 0)
+	resp := services.ConsultarEstudiantes(limit, offset)
 	helpers.RenderResponse(&c.Controller, resp)
 }
 
@@ -56,13 +64,17 @@ func (c *SemaforoController) ObtenerEstudiantes() {
 // @Title ObtenerEstudiantesProyecto
 // @Description obtener estudiantes por proyectos del coordinador
 // @Param	id_coordinador	path 	int	true	"ID del coordinador"
+// @Param	limit	query	int	false	"Número de registros por página"
+// @Param	offset	query	int	false	"Número de registros a saltar"
 // @Success 200 {object} []models.SemaforoTable
 // @Failure 400 :id_coordinador is empty
 // @router /proyecto/:id_coordinador [get]
 func (c *SemaforoController) ObtenerEstudiantesProyecto() {
 	defer errorhandler.HandlePanic(&c.Controller)
 	if id_coordinador, ok := helpers.GetPathParamOrError(&c.Controller, "id_coordinador"); ok {
-		resp := services.ConsultarEstudiantesProyecto(id_coordinador)
+		limit, _ := c.GetInt("limit", 10)
+		offset, _ := c.GetInt("offset", 0)
+		resp := services.ConsultarEstudiantesProyecto(id_coordinador, limit, offset)
 		helpers.RenderResponse(&c.Controller, resp)
 	}
 }
@@ -71,6 +83,8 @@ func (c *SemaforoController) ObtenerEstudiantesProyecto() {
 // @Title ObtenerEstudiantesFacultad
 // @Description obtener estudiantes por facultad del secretario academico
 // @Param	id_secretario	path 	int	true	"ID del secretario académico"
+// @Param	limit	query	int	false	"Número de registros por página"
+// @Param	offset	query	int	false	"Número de registros a saltar"
 // @Success 200 {object} []models.SemaforoTable
 // @Failure 400 :id_secretario is empty
 // @router /facultad/:id_secretario [get]
@@ -78,7 +92,9 @@ func (c *SemaforoController) ObtenerEstudiantesFacultad() {
 	defer errorhandler.HandlePanic(&c.Controller)
 
 	if id_secretario, ok := helpers.GetPathParamOrError(&c.Controller, "id_secretario"); ok {
-		resp := services.ConsultarEstudiantesFacultad(id_secretario)
+		limit, _ := c.GetInt("limit", 10)
+		offset, _ := c.GetInt("offset", 0)
+		resp := services.ConsultarEstudiantesFacultad(id_secretario, limit, offset)
 		helpers.RenderResponse(&c.Controller, resp)
 	}
 }

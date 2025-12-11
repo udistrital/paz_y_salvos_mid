@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/astaxie/beego"
@@ -14,17 +15,17 @@ import (
 	"github.com/udistrital/utils_oas/requestresponse"
 )
 
-func ConsultarEstudiante(codigo string) requestresponse.APIResponse {
-	query := "?query=CodigoEstudiante:" + codigo + ",Activo:true&limit=-1"
+func ConsultarEstudiante(codigo string, limit int, offset int) requestresponse.APIResponse {
+	query := fmt.Sprintf("?query=CodigoEstudiante:%s,Activo:true&limit=%d&offset=%d", codigo, limit, offset)
 	return obtenerSemaforos(query, "No se encontró información del estudiante.")
 }
 
-func ConsultarEstudiantes() requestresponse.APIResponse {
-	query := "?query=Activo:true&limit=-1"
+func ConsultarEstudiantes(limit int, offset int) requestresponse.APIResponse {
+	query := fmt.Sprintf("?query=Activo:true&limit=%d&offset=%d", limit, offset)
 	return obtenerSemaforos(query, "No se encontraron estudiantes activos.")
 }
 
-func ConsultarEstudiantesProyecto(id_coordinador string) requestresponse.APIResponse {
+func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int) requestresponse.APIResponse {
 	// 1. Consultar proyectos del coordinador
 	urlCoord := beego.AppConfig.String("ProtocolAdmin") + "://" +
 		beego.AppConfig.String("UrlcrudWSO2") +
@@ -88,11 +89,11 @@ func ConsultarEstudiantesProyecto(id_coordinador string) requestresponse.APIResp
 		}
 		query += fmt.Sprintf("%d", id)
 	}
-	query += ",Activo:true&limit=-1"
+	query += fmt.Sprintf(",Activo:true&limit=%d&offset=%d", limit, offset)
 	return obtenerSemaforos(query, "No se encontraron estudiantes activos para los proyectos del coordinador.")
 }
 
-func ConsultarEstudiantesFacultad(id_secretario string) requestresponse.APIResponse {
+func ConsultarEstudiantesFacultad(id_secretario string, limit int, offset int) requestresponse.APIResponse {
 	// 1. Consultar facultades del secretario
 	// urlSec := beego.AppConfig.String("ProtocolAdmin") + "://" +
 	// 	beego.AppConfig.String("UrlcrudWSO2") +
@@ -162,7 +163,7 @@ func ConsultarEstudiantesFacultad(id_secretario string) requestresponse.APIRespo
 		}
 		query += fmt.Sprintf("%d", id)
 	}
-	query += ",Activo:true&limit=-1"
+	query += fmt.Sprintf(",Activo:true&limit=%d&offset=%d", limit, offset)
 
 	return obtenerSemaforos(query, "No se encontraron estudiantes activos en las facultades del secretario.")
 }
@@ -347,9 +348,39 @@ func obtenerSemaforos(query, notFoundMsg string) requestresponse.APIResponse {
 		return requestresponse.APIResponseDTO(false, 500, nil, "Error interno al interpretar los datos del semáforo.")
 	}
 
+	// Consultar el total de registros (sin limit)
+	totalCount := 0
+	queryCount := query
+	// Remover limit y offset del query para contar todos
+	if strings.Contains(queryCount, "&limit=") {
+		parts := strings.Split(queryCount, "&limit=")
+		queryCount = parts[0] + "&limit=-1"
+	}
+	if strings.Contains(queryCount, "&offset=") {
+		queryCount = strings.Split(queryCount, "&offset=")[0]
+	}
+
+	var resCount map[string]interface{}
+	urlCount := beego.AppConfig.String("ProtocolAdmin") + "://" +
+		beego.AppConfig.String("UrlCrudPazySalvos") + "/semaforo/" + queryCount
+
+	if err := request.GetJson(urlCount, &resCount); err == nil {
+		if dataCount, ok := resCount["Data"].([]interface{}); ok {
+			totalCount = len(dataCount)
+		}
+	}
+
 	// Reutiliza la lógica de enriquecimiento
 	tabla := consultarDataSemaforo(semaforos)
-	return requestresponse.APIResponseDTO(true, 200, tabla, "Consulta exitosa")
+
+	// Retornar con metadatos de paginación
+	result := map[string]interface{}{
+		"Data":       tabla,
+		"TotalCount": totalCount,
+		"Limit":      len(semaforos),
+	}
+
+	return requestresponse.APIResponseDTO(true, 200, result, "Consulta exitosa")
 }
 
 func consultarDataSemaforo(semaforos []models.Semaforo) []models.SemaforoTable {
