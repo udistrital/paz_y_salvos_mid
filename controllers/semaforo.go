@@ -45,9 +45,14 @@ func (c *SemaforoController) ObtenerEstudiante() {
 
 // ObtenerEstudiantes ...
 // @Title ObtenerEstudiantes
-// @Description obtener todos los estudiantes
+// @Description obtener todos los estudiantes con filtros opcionales
 // @Param	limit	query	int	false	"Número de registros por página"
 // @Param	offset	query	int	false	"Número de registros a saltar"
+// @Param	codigo	query	string	false	"Código del estudiante"
+// @Param	idFacultad	query	int	false	"ID de la facultad"
+// @Param	idProyecto	query	int	false	"ID del proyecto curricular"
+// @Param	anio	query	int	false	"Año de inscripción"
+// @Param	periodo	query	int	false	"Periodo de inscripción"
 // @Success 200 {object} []models.SemaforoTable
 // @Failure 503
 // @router / [get]
@@ -56,7 +61,15 @@ func (c *SemaforoController) ObtenerEstudiantes() {
 
 	limit, _ := c.GetInt("limit", 10)
 	offset, _ := c.GetInt("offset", 0)
-	resp := services.ConsultarEstudiantes(limit, offset)
+
+	// Obtener parámetros de filtro opcionales
+	codigo := c.GetString("codigo")
+	idFacultad, _ := c.GetInt("idFacultad", 0)
+	idProyecto, _ := c.GetInt("idProyecto", 0)
+	anio, _ := c.GetInt("anio", 0)
+	periodo, _ := c.GetInt("periodo", 0)
+
+	resp := services.ConsultarEstudiantes(limit, offset, codigo, idFacultad, idProyecto, anio, periodo)
 	helpers.RenderResponse(&c.Controller, resp)
 }
 
@@ -66,6 +79,9 @@ func (c *SemaforoController) ObtenerEstudiantes() {
 // @Param	id_coordinador	path 	int	true	"ID del coordinador"
 // @Param	limit	query	int	false	"Número de registros por página"
 // @Param	offset	query	int	false	"Número de registros a saltar"
+// @Param	codigo	query	string	false	"Código del estudiante"
+// @Param	anio	query	int	false	"Año de inscripción"
+// @Param	periodo	query	int	false	"Periodo de inscripción"
 // @Success 200 {object} []models.SemaforoTable
 // @Failure 400 :id_coordinador is empty
 // @router /proyecto/:id_coordinador [get]
@@ -74,7 +90,13 @@ func (c *SemaforoController) ObtenerEstudiantesProyecto() {
 	if id_coordinador, ok := helpers.GetPathParamOrError(&c.Controller, "id_coordinador"); ok {
 		limit, _ := c.GetInt("limit", 10)
 		offset, _ := c.GetInt("offset", 0)
-		resp := services.ConsultarEstudiantesProyecto(id_coordinador, limit, offset)
+
+		// Obtener parámetros de filtro opcionales
+		codigo := c.GetString("codigo")
+		anio, _ := c.GetInt("anio", 0)
+		periodo, _ := c.GetInt("periodo", 0)
+
+		resp := services.ConsultarEstudiantesProyecto(id_coordinador, limit, offset, codigo, anio, periodo)
 		helpers.RenderResponse(&c.Controller, resp)
 	}
 }

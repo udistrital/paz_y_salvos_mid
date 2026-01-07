@@ -20,12 +20,36 @@ func ConsultarEstudiante(codigo string, limit int, offset int) requestresponse.A
 	return obtenerSemaforos(query, "No se encontró información del estudiante.")
 }
 
-func ConsultarEstudiantes(limit int, offset int) requestresponse.APIResponse {
-	query := fmt.Sprintf("?query=Activo:true&limit=%d&offset=%d", limit, offset)
+func ConsultarEstudiantes(limit int, offset int, codigo string, idFacultad int, idProyecto int, anio int, periodo int) requestresponse.APIResponse {
+	// Construir query dinámicamente con filtros activos
+	var queryParts []string
+	queryParts = append(queryParts, "Activo:true")
+
+	if codigo != "" {
+		queryParts = append(queryParts, fmt.Sprintf("CodigoEstudiante__contains:%s", codigo))
+	}
+	if idFacultad > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("IdFacultadOikos:%d", idFacultad))
+	}
+	if idProyecto > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("IdProyectoOikos:%d", idProyecto))
+	}
+	if anio > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("AnioInsGrado:%d", anio))
+	}
+	if periodo > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("PerInsGrado:%d", periodo))
+	}
+
+	queryString := strings.Join(queryParts, ",")
+
+	// Construir el query
+	query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
+
 	return obtenerSemaforos(query, "No se encontraron estudiantes activos.")
 }
 
-func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int) requestresponse.APIResponse {
+func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, codigo string, anio int, periodo int) requestresponse.APIResponse {
 	// 1. Consultar proyectos del coordinador
 	urlCoord := beego.AppConfig.String("ProtocolAdmin") + "://" +
 		beego.AppConfig.String("UrlcrudWSO2") +
@@ -81,15 +105,34 @@ func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int) 
 		return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron proyectos oikos para el coordinador.")
 	}
 
-	// 3. Construir query con OR
-	query := "?query=IdProyectoOikos:"
+	// 3. Construir query con filtros
+	var queryParts []string
+
+	// Filtro de proyectos del coordinador con OR
+	proyectosQuery := "IdProyectoOikos:"
 	for i, id := range idsOikos {
 		if i > 0 {
-			query += "|"
+			proyectosQuery += "|"
 		}
-		query += fmt.Sprintf("%d", id)
+		proyectosQuery += fmt.Sprintf("%d", id)
 	}
-	query += fmt.Sprintf(",Activo:true&limit=%d&offset=%d", limit, offset)
+	queryParts = append(queryParts, proyectosQuery)
+	queryParts = append(queryParts, "Activo:true")
+
+	// Agregar filtros adicionales si están presentes
+	if codigo != "" {
+		queryParts = append(queryParts, fmt.Sprintf("CodigoEstudiante__contains:%s", codigo))
+	}
+	if anio > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("AnioInsGrado:%d", anio))
+	}
+	if periodo > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("PerInsGrado:%d", periodo))
+	}
+
+	queryString := strings.Join(queryParts, ",")
+	query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
+
 	return obtenerSemaforos(query, "No se encontraron estudiantes activos para los proyectos del coordinador.")
 }
 
