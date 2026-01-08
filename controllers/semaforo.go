@@ -107,6 +107,10 @@ func (c *SemaforoController) ObtenerEstudiantesProyecto() {
 // @Param	id_secretario	path 	int	true	"ID del secretario académico"
 // @Param	limit	query	int	false	"Número de registros por página"
 // @Param	offset	query	int	false	"Número de registros a saltar"
+// @Param	codigo	query	string	false	"Código del estudiante"
+// @Param	idProyecto	query	int	false	"ID del proyecto curricular"
+// @Param	anio	query	int	false	"Año de inscripción"
+// @Param	periodo	query	int	false	"Periodo de inscripción"
 // @Success 200 {object} []models.SemaforoTable
 // @Failure 400 :id_secretario is empty
 // @router /facultad/:id_secretario [get]
@@ -116,7 +120,14 @@ func (c *SemaforoController) ObtenerEstudiantesFacultad() {
 	if id_secretario, ok := helpers.GetPathParamOrError(&c.Controller, "id_secretario"); ok {
 		limit, _ := c.GetInt("limit", 10)
 		offset, _ := c.GetInt("offset", 0)
-		resp := services.ConsultarEstudiantesFacultad(id_secretario, limit, offset)
+
+		// Obtener parámetros de filtro opcionales
+		codigo := c.GetString("codigo")
+		idProyecto, _ := c.GetInt("idProyecto", 0)
+		anio, _ := c.GetInt("anio", 0)
+		periodo, _ := c.GetInt("periodo", 0)
+
+		resp := services.ConsultarEstudiantesFacultad(id_secretario, limit, offset, codigo, idProyecto, anio, periodo)
 		helpers.RenderResponse(&c.Controller, resp)
 	}
 }
@@ -125,14 +136,29 @@ func (c *SemaforoController) ObtenerEstudiantesFacultad() {
 // @Title ObtenerEstudiantesFacultadLaboratorios
 // @Description obtener estudiantes por facultad del coordinador de laboratorios
 // @Param	id_coordinador_lab	path 	int	true	"ID del coordinador de laboratorios"
+// @Param	limit	query	int	false	"Número de registros por página"
+// @Param	offset	query	int	false	"Número de registros a saltar"
+// @Param	codigo	query	string	false	"Código del estudiante"
+// @Param	idProyecto	query	int	false	"ID del proyecto curricular"
+// @Param	anio	query	int	false	"Año de inscripción"
+// @Param	periodo	query	int	false	"Periodo de inscripción"
 // @Success 200 {object} []models.SemaforoTable
 // @Failure 400 :id_coordinador_lab is empty
-// @router /facultad/laboratorios/:id_coordinador_lab [get]
+// @router /laboratorios/:id_coordinador_lab [get]
 func (c *SemaforoController) ObtenerEstudiantesFacultadLaboratorios() {
 	defer errorhandler.HandlePanic(&c.Controller)
 
 	if id_coordinador_lab, ok := helpers.GetPathParamOrError(&c.Controller, "id_coordinador_lab"); ok {
-		resp := services.ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab)
+		limit, _ := c.GetInt("limit", 10)
+		offset, _ := c.GetInt("offset", 0)
+
+		// Obtener parámetros de filtro opcionales
+		codigo := c.GetString("codigo")
+		idProyecto, _ := c.GetInt("idProyecto", 0)
+		anio, _ := c.GetInt("anio", 0)
+		periodo, _ := c.GetInt("periodo", 0)
+
+		resp := services.ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab, limit, offset, codigo, idProyecto, anio, periodo)
 		helpers.RenderResponse(&c.Controller, resp)
 	}
 }
