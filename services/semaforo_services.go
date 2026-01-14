@@ -15,6 +15,178 @@ import (
 	"github.com/udistrital/utils_oas/requestresponse"
 )
 
+// ConsultarSemaforosAsistente consulta los proyectos donde el usuario es asistente y retorna los semáforos de esos proyectos
+func ConsultarSemaforosAsistente(cedula string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) requestresponse.APIResponse {
+	// 1. Consultar proyectos donde es asistente
+	urlAsistente := beego.AppConfig.String("ProtocolAdmin") + "://" +
+		beego.AppConfig.String("UrlcrudWSO2") +
+		beego.AppConfig.String("NscrudAcademica") +
+		"/asistente_proyecto/" + cedula
+
+	var resAsistente map[string]interface{}
+	if err := request.GetJsonWSO2(urlAsistente, &resAsistente); err != nil {
+		logs.Error("No se pudo obtener los proyectos del asistente %s: %v", cedula, err)
+		return requestresponse.APIResponseDTO(false, 503, nil, "No se pudo consultar los proyectos del asistente.")
+	}
+
+	proyectos := []string{}
+	if asistente, ok := resAsistente["asistente"].(map[string]interface{}); ok {
+		if lista, ok := asistente["proyectos"].([]interface{}); ok {
+			for _, item := range lista {
+				if proyecto, ok := item.(map[string]interface{}); ok {
+					if cod, ok := proyecto["proyecto"].(string); ok {
+						proyectos = append(proyectos, cod)
+					}
+				}
+			}
+		}
+	}
+	// Validar si es asistente por la cantidad de proyectos obtenidos
+	esAsistente := len(proyectos) > 0
+
+	if !esAsistente {
+		resp := models.SemaforosAsistenteResponse{
+			EsAsistente: false,
+			Semaforos:   []models.SemaforoTable{},
+			Limit:       limit,
+			TotalCount:  0,
+		}
+		return requestresponse.APIResponseDTO(false, 404, resp, "El asistente no tiene proyectos asignados.")
+	}
+
+	// 2. Homologar con servicio de homologación
+	var idsOikos []int
+	proyectosMap := make(map[int]models.ProyectoAsignado) // Mapa para eliminar duplicados por IdOikos
+	for _, cod := range proyectos {
+		urlHom := beego.AppConfig.String("ProtocolAdmin") + "://" +
+			beego.AppConfig.String("UrlcrudWSO2") +
+			beego.AppConfig.String("NscrudHomologacion") +
+			"/proyecto_curricular_cod_proyecto/" + cod
+
+		var resHom map[string]interface{}
+		if err := request.GetJsonWSO2(urlHom, &resHom); err != nil {
+			logs.Warn("Error al consultar homologación para proyecto %s: %v", cod, err)
+			continue
+		}
+		if hom, ok := resHom["homologacion"].(map[string]interface{}); ok {
+			if idStr, ok := hom["id_oikos"].(string); ok {
+				if idInt, err := strconv.Atoi(idStr); err == nil {
+					// Solo agregar si no existe ya en el mapa (evita duplicados por IdOikos)
+					if _, existe := proyectosMap[idInt]; !existe {
+						idsOikos = append(idsOikos, idInt)
+						// Obtener nombre del proyecto desde Oikos
+						nombreProyecto := ""
+						urlOikos := beego.AppConfig.String("ProtocolAdmin") + "://" +
+							beego.AppConfig.String("UrlcrudOikos") +
+							"dependencia/" + idStr
+						var resOikos map[string]interface{}
+						if err := request.GetJson(urlOikos, &resOikos); err == nil {
+							if nombre, ok := resOikos["Nombre"].(string); ok {
+								nombreProyecto = nombre
+							}
+						}
+						proyectosMap[idInt] = models.ProyectoAsignado{
+							IdOikos: idInt,
+							Codigo:  cod,
+							Nombre:  strings.ToUpper(nombreProyecto),
+						}
+					}
+				}
+			}
+		}
+	}
+	// Convertir el mapa a slice
+	var proyectosAsignados []models.ProyectoAsignado
+	for _, proyecto := range proyectosMap {
+		proyectosAsignados = append(proyectosAsignados, proyecto)
+	}
+
+	if len(idsOikos) == 0 {
+		return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron proyectos oikos para el asistente.")
+	}
+
+	// 3. Construir query con filtros
+	var queryParts []string
+	// Si se proporciona idProyecto, filtrar solo por ese proyecto
+	if idProyecto > 0 {
+		// Verificar que el proyecto pertenece a los asignados al asistente
+		proyectoValido := false
+		for _, id := range idsOikos {
+			if id == idProyecto {
+				proyectoValido = true
+				break
+			}
+		}
+		if !proyectoValido {
+			return requestresponse.APIResponseDTO(false, 403, nil, "El proyecto no está asignado al asistente.")
+		}
+		queryParts = append(queryParts, fmt.Sprintf("IdProyectoOikos:%d", idProyecto))
+	} else {
+		// Si no se proporciona proyecto, usar todos los asignados
+		proyectosQuery := "IdProyectoOikos:"
+		for i, id := range idsOikos {
+			if i > 0 {
+				proyectosQuery += "|"
+			}
+			proyectosQuery += fmt.Sprintf("%d", id)
+		}
+		queryParts = append(queryParts, proyectosQuery)
+	}
+	queryParts = append(queryParts, "Activo:true")
+	if codigo != "" {
+		queryParts = append(queryParts, fmt.Sprintf("CodigoEstudiante__contains:%s", codigo))
+	}
+	if anio > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("AnioInsGrado:%d", anio))
+	}
+	if periodo > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("PerInsGrado:%d", periodo))
+	}
+	queryString := strings.Join(queryParts, ",")
+	query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
+
+	// Obtener los semáforos normalmente
+	resp := obtenerSemaforos(query, "No se encontraron estudiantes activos para los proyectos del asistente.")
+
+	var semaforosTable []models.SemaforoTable
+	var totalCount int
+
+	if resp.Data != nil {
+		if dataMap, ok := resp.Data.(map[string]interface{}); ok {
+			switch arr := dataMap["Data"].(type) {
+			case []models.SemaforoTable:
+				semaforosTable = arr
+			case []interface{}:
+				var semaforosRaw []models.Semaforo
+				dataBytes, err := json.Marshal(arr)
+				if err == nil {
+					errUnmarshal := json.Unmarshal(dataBytes, &semaforosRaw)
+					if errUnmarshal == nil {
+						semaforosTable = consultarDataSemaforo(semaforosRaw)
+					}
+				}
+			}
+			if tc, ok := dataMap["TotalCount"].(int); ok {
+				totalCount = tc
+			} else if tcF, ok := dataMap["TotalCount"].(float64); ok {
+				totalCount = int(tcF)
+			}
+		}
+	}
+
+	if semaforosTable == nil {
+		semaforosTable = []models.SemaforoTable{}
+	}
+	resp.Data = models.SemaforosAsistenteResponse{
+		Semaforos:          semaforosTable,
+		Limit:              limit,
+		TotalCount:         totalCount,
+		EsAsistente:        esAsistente,
+		ProyectosAsignados: proyectosAsignados,
+	}
+	return resp
+}
+
 func ConsultarEstudiante(codigo string, limit int, offset int) requestresponse.APIResponse {
 	query := fmt.Sprintf("?query=CodigoEstudiante:%s,Activo:true&limit=%d&offset=%d", codigo, limit, offset)
 	return obtenerSemaforos(query, "No se encontró información del estudiante.")

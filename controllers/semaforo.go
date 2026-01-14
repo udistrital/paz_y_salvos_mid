@@ -21,6 +21,35 @@ func (c *SemaforoController) URLMapping() {
 	c.Mapping("ObtenerEstudiantesFacultadLaboratorios", c.ObtenerEstudiantesFacultadLaboratorios)
 }
 
+// ObtenerSemaforosAsistente ...
+// @Title ObtenerSemaforosAsistente
+// @Description Obtiene los semáforos de los proyectos donde el usuario es asistente de proyecto
+// @Param	cedula	path	string	true	"Cédula del asistente"
+// @Param	limit	query	int	false	"Número de registros por página"
+// @Param	offset	query	int	false	"Número de registros a saltar"
+// @Param	codigo	query	string	false	"Código del estudiante"
+// @Param	idProyecto	query	int	false	"ID del proyecto Oikos"
+// @Param	anio	query	int	false	"Año de inscripción"
+// @Param	periodo	query	int	false	"Periodo de inscripción"
+// @Success 200 {object} []models.SemaforoTable
+// @Failure 400 {object} requestresponse.APIResponse "Parámetro 'cedula' es obligatorio"
+// @Failure 404 {object} requestresponse.APIResponse "No se encontraron proyectos asignados"
+// @Failure 503 {object} requestresponse.APIResponse "Error al consultar el servicio externo"
+// @router /asistente_proyecto/:cedula [get]
+func (c *SemaforoController) ObtenerSemaforosAsistente() {
+	defer errorhandler.HandlePanic(&c.Controller)
+	if cedula, ok := helpers.GetPathParamOrError(&c.Controller, "cedula"); ok {
+		limit, _ := c.GetInt("limit", 10)
+		offset, _ := c.GetInt("offset", 0)
+		codigo := c.GetString("codigo")
+		idProyecto, _ := c.GetInt("idProyecto", 0)
+		anio, _ := c.GetInt("anio", 0)
+		periodo, _ := c.GetInt("periodo", 0)
+		resp := services.ConsultarSemaforosAsistente(cedula, limit, offset, codigo, idProyecto, anio, periodo)
+		helpers.RenderResponse(&c.Controller, resp)
+	}
+}
+
 // ObtenerEstudiante ...
 // @Title ObtenerEstudiante
 // @Description Obtiene información del semáforo de un estudiante por código

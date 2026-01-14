@@ -4,6 +4,13 @@ import (
 	"time"
 )
 
+// ProyectoAsignado representa un proyecto curricular homologado y su nombre
+type ProyectoAsignado struct {
+	IdOikos int    `json:"IdOikos"`
+	Codigo  string `json:"Codigo"`
+	Nombre  string `json:"Nombre"`
+}
+
 type Semaforo struct {
 	Id                int
 	CodigoEstudiante  float64
@@ -42,4 +49,12 @@ type SemaforoTable struct {
 	Urelinter        bool
 	Orc              bool
 	Observacion      string
+}
+
+type SemaforosAsistenteResponse struct {
+	EsAsistente        bool               `json:"EsAsistente"`
+	Semaforos          []SemaforoTable    `json:"Semaforos"`
+	Limit              int                `json:"Limit"`
+	TotalCount         int                `json:"TotalCount"`
+	ProyectosAsignados []ProyectoAsignado `json:"ProyectosAsignados"`
 }
