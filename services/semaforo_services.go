@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/astaxie/beego"
@@ -14,17 +15,213 @@ import (
 	"github.com/udistrital/utils_oas/requestresponse"
 )
 
-func ConsultarEstudiante(codigo string) requestresponse.APIResponse {
-	query := "?query=CodigoEstudiante:" + codigo + ",Activo:true&limit=-1"
+// ConsultarSemaforosAsistente consulta los proyectos donde el usuario es asistente y retorna los semáforos de esos proyectos
+func ConsultarSemaforosAsistente(cedula string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) requestresponse.APIResponse {
+	// 1. Consultar proyectos donde es asistente
+	urlAsistente := beego.AppConfig.String("ProtocolAdmin") + "://" +
+		beego.AppConfig.String("UrlcrudWSO2") +
+		beego.AppConfig.String("NscrudAcademica") +
+		"/asistente_proyecto/" + cedula
+
+	var resAsistente map[string]interface{}
+	if err := request.GetJsonWSO2(urlAsistente, &resAsistente); err != nil {
+		logs.Error("No se pudo obtener los proyectos del asistente %s: %v", cedula, err)
+		return requestresponse.APIResponseDTO(false, 503, nil, "No se pudo consultar los proyectos del asistente.")
+	}
+
+	proyectos := []string{}
+	if asistente, ok := resAsistente["asistente"].(map[string]interface{}); ok {
+		if lista, ok := asistente["proyectos"].([]interface{}); ok {
+			for _, item := range lista {
+				if proyecto, ok := item.(map[string]interface{}); ok {
+					if cod, ok := proyecto["proyecto"].(string); ok {
+						proyectos = append(proyectos, cod)
+					}
+				}
+			}
+		}
+	}
+	// Validar si es asistente por la cantidad de proyectos obtenidos
+	esAsistente := len(proyectos) > 0
+
+	if !esAsistente {
+		resp := models.SemaforosAsistenteResponse{
+			EsAsistente: false,
+			Semaforos:   []models.SemaforoTable{},
+			Limit:       limit,
+			TotalCount:  0,
+		}
+		return requestresponse.APIResponseDTO(false, 404, resp, "El asistente no tiene proyectos asignados.")
+	}
+
+	// 2. Homologar con servicio de homologación
+	var idsOikos []int
+	proyectosMap := make(map[int]models.ProyectoAsignado) // Mapa para eliminar duplicados por IdOikos
+	for _, cod := range proyectos {
+		urlHom := beego.AppConfig.String("ProtocolAdmin") + "://" +
+			beego.AppConfig.String("UrlcrudWSO2") +
+			beego.AppConfig.String("NscrudHomologacion") +
+			"/proyecto_curricular_cod_proyecto/" + cod
+
+		var resHom map[string]interface{}
+		if err := request.GetJsonWSO2(urlHom, &resHom); err != nil {
+			logs.Warn("Error al consultar homologación para proyecto %s: %v", cod, err)
+			continue
+		}
+		if hom, ok := resHom["homologacion"].(map[string]interface{}); ok {
+			if idStr, ok := hom["id_oikos"].(string); ok {
+				if idInt, err := strconv.Atoi(idStr); err == nil {
+					// Solo agregar si no existe ya en el mapa (evita duplicados por IdOikos)
+					if _, existe := proyectosMap[idInt]; !existe {
+						idsOikos = append(idsOikos, idInt)
+						// Obtener nombre del proyecto desde Oikos
+						nombreProyecto := ""
+						urlOikos := beego.AppConfig.String("ProtocolAdmin") + "://" +
+							beego.AppConfig.String("UrlcrudOikos") +
+							"dependencia/" + idStr
+						var resOikos map[string]interface{}
+						if err := request.GetJson(urlOikos, &resOikos); err == nil {
+							if nombre, ok := resOikos["Nombre"].(string); ok {
+								nombreProyecto = nombre
+							}
+						}
+						proyectosMap[idInt] = models.ProyectoAsignado{
+							IdOikos: idInt,
+							Codigo:  cod,
+							Nombre:  strings.ToUpper(nombreProyecto),
+						}
+					}
+				}
+			}
+		}
+	}
+	// Convertir el mapa a slice
+	var proyectosAsignados []models.ProyectoAsignado
+	for _, proyecto := range proyectosMap {
+		proyectosAsignados = append(proyectosAsignados, proyecto)
+	}
+
+	if len(idsOikos) == 0 {
+		return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron proyectos oikos para el asistente.")
+	}
+
+	// 3. Construir query con filtros
+	var queryParts []string
+	// Si se proporciona idProyecto, filtrar solo por ese proyecto
+	if idProyecto > 0 {
+		// Verificar que el proyecto pertenece a los asignados al asistente
+		proyectoValido := false
+		for _, id := range idsOikos {
+			if id == idProyecto {
+				proyectoValido = true
+				break
+			}
+		}
+		if !proyectoValido {
+			return requestresponse.APIResponseDTO(false, 403, nil, "El proyecto no está asignado al asistente.")
+		}
+		queryParts = append(queryParts, fmt.Sprintf("IdProyectoOikos:%d", idProyecto))
+	} else {
+		// Si no se proporciona proyecto, usar todos los asignados
+		proyectosQuery := "IdProyectoOikos:"
+		for i, id := range idsOikos {
+			if i > 0 {
+				proyectosQuery += "|"
+			}
+			proyectosQuery += fmt.Sprintf("%d", id)
+		}
+		queryParts = append(queryParts, proyectosQuery)
+	}
+	queryParts = append(queryParts, "Activo:true")
+	if codigo != "" {
+		queryParts = append(queryParts, fmt.Sprintf("CodigoEstudiante__contains:%s", codigo))
+	}
+	if anio > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("AnioInsGrado:%d", anio))
+	}
+	if periodo > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("PerInsGrado:%d", periodo))
+	}
+	queryString := strings.Join(queryParts, ",")
+	query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
+
+	// Obtener los semáforos normalmente
+	resp := obtenerSemaforos(query, "No se encontraron estudiantes activos para los proyectos del asistente.")
+
+	var semaforosTable []models.SemaforoTable
+	var totalCount int
+
+	if resp.Data != nil {
+		if dataMap, ok := resp.Data.(map[string]interface{}); ok {
+			switch arr := dataMap["Data"].(type) {
+			case []models.SemaforoTable:
+				semaforosTable = arr
+			case []interface{}:
+				var semaforosRaw []models.Semaforo
+				dataBytes, err := json.Marshal(arr)
+				if err == nil {
+					errUnmarshal := json.Unmarshal(dataBytes, &semaforosRaw)
+					if errUnmarshal == nil {
+						semaforosTable = consultarDataSemaforo(semaforosRaw)
+					}
+				}
+			}
+			if tc, ok := dataMap["TotalCount"].(int); ok {
+				totalCount = tc
+			} else if tcF, ok := dataMap["TotalCount"].(float64); ok {
+				totalCount = int(tcF)
+			}
+		}
+	}
+
+	if semaforosTable == nil {
+		semaforosTable = []models.SemaforoTable{}
+	}
+	resp.Data = models.SemaforosAsistenteResponse{
+		Semaforos:          semaforosTable,
+		Limit:              limit,
+		TotalCount:         totalCount,
+		EsAsistente:        esAsistente,
+		ProyectosAsignados: proyectosAsignados,
+	}
+	return resp
+}
+
+func ConsultarEstudiante(codigo string, limit int, offset int) requestresponse.APIResponse {
+	query := fmt.Sprintf("?query=CodigoEstudiante:%s,Activo:true&limit=%d&offset=%d", codigo, limit, offset)
 	return obtenerSemaforos(query, "No se encontró información del estudiante.")
 }
 
-func ConsultarEstudiantes() requestresponse.APIResponse {
-	query := "?query=Activo:true&limit=-1"
+func ConsultarEstudiantes(limit int, offset int, codigo string, idFacultad int, idProyecto int, anio int, periodo int) requestresponse.APIResponse {
+	// Construir query dinámicamente con filtros activos
+	var queryParts []string
+	queryParts = append(queryParts, "Activo:true")
+
+	if codigo != "" {
+		queryParts = append(queryParts, fmt.Sprintf("CodigoEstudiante__contains:%s", codigo))
+	}
+	if idFacultad > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("IdFacultadOikos:%d", idFacultad))
+	}
+	if idProyecto > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("IdProyectoOikos:%d", idProyecto))
+	}
+	if anio > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("AnioInsGrado:%d", anio))
+	}
+	if periodo > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("PerInsGrado:%d", periodo))
+	}
+
+	queryString := strings.Join(queryParts, ",")
+
+	// Construir el query
+	query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
+
 	return obtenerSemaforos(query, "No se encontraron estudiantes activos.")
 }
 
-func ConsultarEstudiantesProyecto(id_coordinador string) requestresponse.APIResponse {
+func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, codigo string, anio int, periodo int) requestresponse.APIResponse {
 	// 1. Consultar proyectos del coordinador
 	urlCoord := beego.AppConfig.String("ProtocolAdmin") + "://" +
 		beego.AppConfig.String("UrlcrudWSO2") +
@@ -80,19 +277,38 @@ func ConsultarEstudiantesProyecto(id_coordinador string) requestresponse.APIResp
 		return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron proyectos oikos para el coordinador.")
 	}
 
-	// 3. Construir query con OR
-	query := "?query=IdProyectoOikos:"
+	// 3. Construir query con filtros
+	var queryParts []string
+
+	// Filtro de proyectos del coordinador con OR
+	proyectosQuery := "IdProyectoOikos:"
 	for i, id := range idsOikos {
 		if i > 0 {
-			query += "|"
+			proyectosQuery += "|"
 		}
-		query += fmt.Sprintf("%d", id)
+		proyectosQuery += fmt.Sprintf("%d", id)
 	}
-	query += ",Activo:true&limit=-1"
+	queryParts = append(queryParts, proyectosQuery)
+	queryParts = append(queryParts, "Activo:true")
+
+	// Agregar filtros adicionales si están presentes
+	if codigo != "" {
+		queryParts = append(queryParts, fmt.Sprintf("CodigoEstudiante__contains:%s", codigo))
+	}
+	if anio > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("AnioInsGrado:%d", anio))
+	}
+	if periodo > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("PerInsGrado:%d", periodo))
+	}
+
+	queryString := strings.Join(queryParts, ",")
+	query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
+
 	return obtenerSemaforos(query, "No se encontraron estudiantes activos para los proyectos del coordinador.")
 }
 
-func ConsultarEstudiantesFacultad(id_secretario string) requestresponse.APIResponse {
+func ConsultarEstudiantesFacultad(id_secretario string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) requestresponse.APIResponse {
 	// 1. Consultar facultades del secretario
 	// urlSec := beego.AppConfig.String("ProtocolAdmin") + "://" +
 	// 	beego.AppConfig.String("UrlcrudWSO2") +
@@ -154,20 +370,44 @@ func ConsultarEstudiantesFacultad(id_secretario string) requestresponse.APIRespo
 		return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron facultades oikos para el secretario.")
 	}
 
-	// 3. Construir query con OR
-	query := "?query=IdFacultadOikos:"
+	// 3. Construir query con OR para facultades
+	var queryParts []string
+	queryParts = append(queryParts, "IdFacultadOikos:")
 	for i, id := range idsOikos {
 		if i > 0 {
-			query += "|"
+			queryParts[0] += "|"
 		}
-		query += fmt.Sprintf("%d", id)
+		queryParts[0] += fmt.Sprintf("%d", id)
 	}
-	query += ",Activo:true&limit=-1"
+	queryParts = append(queryParts, "Activo:true")
 
-	return obtenerSemaforos(query, "No se encontraron estudiantes activos en las facultades del secretario.")
+	// Agregar filtros adicionales si están presentes
+	if codigo != "" {
+		queryParts = append(queryParts, fmt.Sprintf("CodigoEstudiante__contains:%s", codigo))
+	}
+	if idProyecto > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("IdProyectoOikos:%d", idProyecto))
+	}
+	if anio > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("AnioInsGrado:%d", anio))
+	}
+	if periodo > 0 {
+		queryParts = append(queryParts, fmt.Sprintf("PerInsGrado:%d", periodo))
+	}
+
+	queryString := strings.Join(queryParts, ",")
+	query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
+
+	// Obtener el primer ID de facultad (si hay múltiples, tomamos el primero)
+	var idFacultadOikos int
+	if len(idsOikos) > 0 {
+		idFacultadOikos = idsOikos[0]
+	}
+
+	return obtenerSemaforosConFacultad(query, "No se encontraron estudiantes activos en las facultades del secretario.", idFacultadOikos)
 }
 
-func ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab string) requestresponse.APIResponse {
+func ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) requestresponse.APIResponse {
 
 	// 1. Consultar de que dependencias es jefe
 	// Obtener la fecha actual en formato YYYY-MM-DD
@@ -186,6 +426,7 @@ func ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab string) request
 	}
 
 	var dependenciasConNombre []map[string]interface{}
+
 	for _, jefe := range resJefe {
 		urlDep := beego.AppConfig.String("ProtocolAdmin") + "://" +
 			beego.AppConfig.String("UrlcrudOikos") +
@@ -220,7 +461,7 @@ func ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab string) request
 
 	// Si no hay dependencias de laboratorios, probablemente es el decano de la facultad
 	if len(laboratorios) == 0 {
-		fmt.Println("No se encontraron dependencias de laboratorios. Probablemente es el decano de la facultad.")
+		logs.Info("No se encontraron dependencias de laboratorios. Probablemente es el decano de la facultad.")
 		// Se usa el id obtenido en dependencias con nombre para armar el query y obtener el semaforo
 		var idsDependencias []int
 		for _, dep := range dependenciasConNombre {
@@ -231,90 +472,142 @@ func ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab string) request
 		if len(idsDependencias) == 0 {
 			return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron dependencias asociadas al decano.")
 		}
-		query := "?query=IdFacultadOikos:"
+
+		// Construir query con filtros adicionales
+		var queryParts []string
+		queryParts = append(queryParts, "IdFacultadOikos:")
 		for i, id := range idsDependencias {
 			if i > 0 {
-				query += "|"
+				queryParts[0] += "|"
 			}
-			query += fmt.Sprintf("%d", id)
+			queryParts[0] += fmt.Sprintf("%d", id)
 		}
-		query += ",Activo:true&limit=-1"
-		fmt.Println("Query para decano:", query)
-		return obtenerSemaforos(query, "No se encontraron estudiantes activos en las facultades asociadas al decano.")
+		queryParts = append(queryParts, "Activo:true")
+
+		// Agregar filtros adicionales si están presentes
+		if codigo != "" {
+			queryParts = append(queryParts, fmt.Sprintf("CodigoEstudiante__contains:%s", codigo))
+		}
+		if idProyecto > 0 {
+			queryParts = append(queryParts, fmt.Sprintf("IdProyectoOikos:%d", idProyecto))
+		}
+		if anio > 0 {
+			queryParts = append(queryParts, fmt.Sprintf("AnioInsGrado:%d", anio))
+		}
+		if periodo > 0 {
+			queryParts = append(queryParts, fmt.Sprintf("PerInsGrado:%d", periodo))
+		}
+
+		queryString := strings.Join(queryParts, ",")
+		query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
+
+		// Obtener el primer ID de facultad
+		var idFacultadOikos int
+		if len(idsDependencias) > 0 {
+			idFacultadOikos = idsDependencias[0]
+		}
+
+		return obtenerSemaforosConFacultad(query, "No se encontraron estudiantes activos en las facultades asociadas al decano.", idFacultadOikos)
 
 	} else {
 		// Se consulta la dependencia padre de las dependencias obtenidas
+		logs.Info("Dependencias de laboratorios encontradas: %d", len(laboratorios))
 
+		var facultadesOikos []int
+		facultadesMap := make(map[int]bool) // Para rastrear facultades únicas
+
+		for _, lab := range laboratorios {
+			labId := 0
+			if id, ok := lab["DependenciaId"].(int); ok {
+				labId = id
+			}
+
+			if labId == 0 {
+				continue
+			}
+
+			// Consultar información completa del laboratorio para obtener su padre
+			urlLabDep := beego.AppConfig.String("ProtocolAdmin") + "://" +
+				beego.AppConfig.String("UrlcrudOikos") +
+				"dependencia_padre/?query=Hija:" + fmt.Sprintf("%d", labId)
+
+			var resLabDep []interface{}
+			if err := request.GetJson(urlLabDep, &resLabDep); err != nil {
+				logs.Warn("No se pudo obtener información completa del laboratorio %d: %v", labId, err)
+				continue
+			}
+
+			// La respuesta es un array, procesar cada elemento
+			for _, item := range resLabDep {
+				if relacion, ok := item.(map[string]interface{}); ok {
+					// Extraer el ID de la facultad desde el campo Padre
+					if padre, ok := relacion["Padre"].(map[string]interface{}); ok {
+						if padreId, ok := padre["Id"].(float64); ok {
+							facultadId := int(padreId)
+
+							// Agregar a la lista si no existe
+							if !facultadesMap[facultadId] {
+								facultadesMap[facultadId] = true
+								facultadesOikos = append(facultadesOikos, facultadId)
+
+								nombreFacultad := ""
+								if nombre, ok := padre["Nombre"].(string); ok {
+									nombreFacultad = nombre
+								}
+								logs.Info("Facultad padre encontrada: ID %d (%s) para laboratorio ID %d", facultadId, nombreFacultad, labId)
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if len(facultadesOikos) == 0 {
+			return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron facultades asociadas a los laboratorios del coordinador.")
+		}
+
+		// Alertar si se encontraron múltiples facultades diferentes
+		if len(facultadesOikos) > 1 {
+			logs.Warn("ALERTA: El coordinador de laboratorios tiene laboratorios en %d facultades diferentes: %v", len(facultadesOikos), facultadesOikos)
+			fmt.Printf("ALERTA: Se encontraron laboratorios en %d facultades diferentes: %v\n", len(facultadesOikos), facultadesOikos)
+		}
+
+		// Construir query con las facultades encontradas y filtros adicionales
+		var queryParts []string
+		queryParts = append(queryParts, "IdFacultadOikos:")
+		for i, id := range facultadesOikos {
+			if i > 0 {
+				queryParts[0] += "|"
+			}
+			queryParts[0] += fmt.Sprintf("%d", id)
+		}
+		queryParts = append(queryParts, "Activo:true")
+
+		// Agregar filtros adicionales si están presentes
+		if codigo != "" {
+			queryParts = append(queryParts, fmt.Sprintf("CodigoEstudiante__contains:%s", codigo))
+		}
+		if idProyecto > 0 {
+			queryParts = append(queryParts, fmt.Sprintf("IdProyectoOikos:%d", idProyecto))
+		}
+		if anio > 0 {
+			queryParts = append(queryParts, fmt.Sprintf("AnioInsGrado:%d", anio))
+		}
+		if periodo > 0 {
+			queryParts = append(queryParts, fmt.Sprintf("PerInsGrado:%d", periodo))
+		}
+
+		queryString := strings.Join(queryParts, ",")
+		query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
+
+		// Obtener el primer ID de facultad
+		var idFacultadOikos int
+		if len(facultadesOikos) > 0 {
+			idFacultadOikos = facultadesOikos[0]
+		}
+
+		return obtenerSemaforosConFacultad(query, "No se encontraron estudiantes activos en las facultades asociadas a los laboratorios.", idFacultadOikos)
 	}
-
-	// Imprimir las dependencias de laboratorios encontradas
-	laboratoriosJSON, err := json.MarshalIndent(laboratorios, "", "  ")
-	if err != nil {
-		logs.Error("Error al serializar laboratorios a JSON: %v", err)
-	} else {
-		fmt.Println("Dependencias de laboratorios encontradas:", string(laboratoriosJSON))
-	}
-
-	// Imprimir el JSON de las dependencias obtenidas
-	// dependenciasJSON, err := json.MarshalIndent(dependencias, "", "  ")
-	// if err != nil {
-	// 	logs.Error("Error al serializar dependencias a JSON: %v", err)
-	// } else {
-	// 	fmt.Println("Dependencias obtenidas:", string(dependenciasJSON))
-	// }
-
-	// if len(dependencias) == 0 {
-	// 	return requestresponse.APIResponseDTO(false, 404, nil, "El coordinador de laboratorios no tiene dependencias asociadas como jefe en la fecha actual.")
-	// }
-
-	// 2. Validar si las dependencias son laboratorios y obtener facultades padre
-	// var facultadesOikos []int
-	// for _, dep := range dependencias {
-	// 	// Consultar información de la dependencia
-	// 	urlDep := beego.AppConfig.String("ProtocolAdmin") + "://" +
-	// 		beego.AppConfig.String("UrlcrudOikos") +
-	// 		"dependencia/" + fmt.Sprintf("%d", dep.DependenciaId)
-
-	// 	var resDep map[string]interface{}
-	// 	if err := request.GetJson(urlDep, &resDep); err != nil {
-	// 		logs.Warn("No se pudo obtener información de la dependencia %d: %v", dep.DependenciaId, err)
-	// 		continue
-	// 	}
-
-	// 	// Verificar si es un laboratorio (por nombre o tipo)
-	// 	if nombre, ok := resDep["Nombre"].(string); ok {
-	// 		logs.Info("Dependencia encontrada: %s (ID: %d)", nombre, dep.DependenciaId)
-
-	// 		// Buscar dependencia padre (facultad)
-	// 		if dependenciaPadreId, ok := resDep["DependenciaTipoDependenciaId"].(map[string]interface{}); ok {
-	// 			if dependencia, ok := dependenciaPadreId["DependenciaId"].(map[string]interface{}); ok {
-	// 				if padreId, ok := dependencia["Id"].(float64); ok {
-	// 					// Convertir a int y agregar a la lista de facultades
-	// 					facultadesOikos = append(facultadesOikos, int(padreId))
-	// 					logs.Info("Facultad padre encontrada: ID %d para laboratorio %s", int(padreId), nombre)
-	// 				}
-	// 			}
-	// 		}
-	// 	}
-	// }
-
-	// if len(facultadesOikos) == 0 {
-	// 	return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron facultades asociadas a los laboratorios del coordinador.")
-	// }
-
-	// // 3. Construir query para consultar estudiantes con pendientes de laboratorios
-	// query := "?query=IdFacultadOikos:"
-	// for i, id := range facultadesOikos {
-	// 	if i > 0 {
-	// 		query += "|"
-	// 	}
-	// 	query += fmt.Sprintf("%d", id)
-	// }
-	// query += ",Laboratorios:false,Activo:true&limit=-1"
-
-	// return obtenerSemaforos(query, "No se encontraron estudiantes con pendientes de laboratorios en las facultades asociadas.")
-
-	return requestresponse.APIResponseDTO(false, 503, nil, "Función no implementada. Consultar con el equipo de desarrollo.")
 }
 
 func obtenerSemaforos(query, notFoundMsg string) requestresponse.APIResponse {
@@ -323,8 +616,6 @@ func obtenerSemaforos(query, notFoundMsg string) requestresponse.APIResponse {
 
 	url := beego.AppConfig.String("ProtocolAdmin") + "://" +
 		beego.AppConfig.String("UrlCrudPazySalvos") + "/semaforo/" + query
-
-	fmt.Println("URL de consulta:", url)
 
 	if err := request.GetJson(url, &res); err != nil {
 		logs.Error("Error al consultar paz_y_salvos:", err)
@@ -347,9 +638,102 @@ func obtenerSemaforos(query, notFoundMsg string) requestresponse.APIResponse {
 		return requestresponse.APIResponseDTO(false, 500, nil, "Error interno al interpretar los datos del semáforo.")
 	}
 
+	// Consultar el total de registros (sin limit)
+	totalCount := 0
+	queryCount := query
+	// Remover limit y offset del query para contar todos
+	if strings.Contains(queryCount, "&limit=") {
+		parts := strings.Split(queryCount, "&limit=")
+		queryCount = parts[0] + "&limit=-1"
+	}
+	if strings.Contains(queryCount, "&offset=") {
+		queryCount = strings.Split(queryCount, "&offset=")[0]
+	}
+
+	var resCount map[string]interface{}
+	urlCount := beego.AppConfig.String("ProtocolAdmin") + "://" +
+		beego.AppConfig.String("UrlCrudPazySalvos") + "/semaforo/" + queryCount
+
+	if err := request.GetJson(urlCount, &resCount); err == nil {
+		if dataCount, ok := resCount["Data"].([]interface{}); ok {
+			totalCount = len(dataCount)
+		}
+	}
+
 	// Reutiliza la lógica de enriquecimiento
 	tabla := consultarDataSemaforo(semaforos)
-	return requestresponse.APIResponseDTO(true, 200, tabla, "Consulta exitosa")
+
+	// Retornar con metadatos de paginación
+	result := map[string]interface{}{
+		"Data":       tabla,
+		"TotalCount": totalCount,
+		"Limit":      len(semaforos),
+	}
+
+	return requestresponse.APIResponseDTO(true, 200, result, "Consulta exitosa")
+}
+
+// obtenerSemaforosConFacultad es similar a obtenerSemaforos pero incluye el IdFacultadOikos en la respuesta
+func obtenerSemaforosConFacultad(query, notFoundMsg string, idFacultadOikos int) requestresponse.APIResponse {
+	var res map[string]interface{}
+	var semaforos []models.Semaforo
+
+	url := beego.AppConfig.String("ProtocolAdmin") + "://" +
+		beego.AppConfig.String("UrlCrudPazySalvos") + "/semaforo/" + query
+
+	if err := request.GetJson(url, &res); err != nil {
+		logs.Error("Error al consultar paz_y_salvos:", err)
+		return requestresponse.APIResponseDTO(false, 503, nil, "Error al consultar los datos del semáforo.")
+	}
+
+	data, ok := res["Data"].([]interface{})
+	if !ok || len(data) == 0 {
+		return requestresponse.APIResponseDTO(false, 404, nil, notFoundMsg)
+	}
+
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		logs.Error("Error al serializar datos:", err)
+		return requestresponse.APIResponseDTO(false, 500, nil, "Error al procesar los datos del semáforo.")
+	}
+
+	if err := json.Unmarshal(dataBytes, &semaforos); err != nil {
+		logs.Error("Error al convertir datos a estructura:", err)
+		return requestresponse.APIResponseDTO(false, 500, nil, "Error interno al interpretar los datos del semáforo.")
+	}
+
+	// Consultar el total de registros (sin limit)
+	totalCount := 0
+	queryCount := query
+	// Remover limit y offset del query para contar todos
+	if strings.Contains(queryCount, "&limit=") {
+		parts := strings.Split(queryCount, "&limit=")
+		queryCount = parts[0] + "&limit=-1"
+	}
+	if strings.Contains(queryCount, "&offset=") {
+		queryCount = strings.Split(queryCount, "&offset=")[0]
+	}
+
+	var resCount map[string]interface{}
+	urlCount := beego.AppConfig.String("ProtocolAdmin") + "://" +
+		beego.AppConfig.String("UrlCrudPazySalvos") + "/semaforo/" + queryCount
+
+	if err := request.GetJson(urlCount, &resCount); err == nil {
+		if dataCount, ok := resCount["Data"].([]interface{}); ok {
+			totalCount = len(dataCount)
+		}
+	}
+
+	tabla := consultarDataSemaforo(semaforos)
+
+	result := map[string]interface{}{
+		"Data":            tabla,
+		"TotalCount":      totalCount,
+		"Limit":           len(semaforos),
+		"IdFacultadOikos": idFacultadOikos,
+	}
+
+	return requestresponse.APIResponseDTO(true, 200, result, "Consulta exitosa")
 }
 
 func consultarDataSemaforo(semaforos []models.Semaforo) []models.SemaforoTable {
@@ -408,21 +792,26 @@ func consultarDataSemaforo(semaforos []models.Semaforo) []models.SemaforoTable {
 		}
 
 		result = append(result, models.SemaforoTable{
-			Id:               s.Id,
-			CodigoEstudiante: s.CodigoEstudiante,
-			NombreEstudiante: nombreEstudiante,
-			NombreFacultad:   nombreFacultad,
-			NombreProyecto:   nombreProyecto,
-			AnioInsGrado:     s.AnioInsGrado,
-			PerInsGrado:      s.PerInsGrado,
-			Academico:        s.Academico,
-			Financiero:       s.Financiero,
-			Biblioteca:       s.Biblioteca,
-			Laboratorios:     s.Laboratorios,
-			Bienestar:        s.Bienestar,
-			Urelinter:        s.Urelinter,
-			Orc:              s.Orc,
-			Observacion:      s.Observacion,
+			Id:                      s.Id,
+			CodigoEstudiante:        s.CodigoEstudiante,
+			NombreEstudiante:        nombreEstudiante,
+			NombreFacultad:          nombreFacultad,
+			NombreProyecto:          nombreProyecto,
+			AnioInsGrado:            s.AnioInsGrado,
+			PerInsGrado:             s.PerInsGrado,
+			Academico:               s.Academico,
+			Financiero:              s.Financiero,
+			Biblioteca:              s.Biblioteca,
+			Laboratorios:            s.Laboratorios,
+			Bienestar:               s.Bienestar,
+			Urelinter:               s.Urelinter,
+			Orc:                     s.Orc,
+			ObservacionCoordinacion: s.ObservacionCoordinacion,
+			ObservacionBiblioteca:   s.ObservacionBiblioteca,
+			ObservacionLaboratorios: s.ObservacionLaboratorios,
+			ObservacionBienestar:    s.ObservacionBienestar,
+			ObservacionUrelinter:    s.ObservacionUrelinter,
+			ObservacionOrc:          s.ObservacionOrc,
 		})
 	}
 
