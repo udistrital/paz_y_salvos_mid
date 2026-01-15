@@ -18,6 +18,15 @@ func init() {
 
 	beego.GlobalControllerRouter["github.com/udistrital/paz_y_salvos_mid/controllers:SemaforoController"] = append(beego.GlobalControllerRouter["github.com/udistrital/paz_y_salvos_mid/controllers:SemaforoController"],
 		beego.ControllerComments{
+			Method:           "ObtenerSemaforosAsistente",
+			Router:           "/asistente_proyecto/:cedula",
+			AllowHTTPMethods: []string{"get"},
+			MethodParams:     param.Make(),
+			Filters:          nil,
+			Params:           nil})
+
+	beego.GlobalControllerRouter["github.com/udistrital/paz_y_salvos_mid/controllers:SemaforoController"] = append(beego.GlobalControllerRouter["github.com/udistrital/paz_y_salvos_mid/controllers:SemaforoController"],
+		beego.ControllerComments{
 			Method:           "ObtenerEstudiante",
 			Router:           "/estudiante/:codigo",
 			AllowHTTPMethods: []string{"get"},
@@ -37,7 +46,7 @@ func init() {
 	beego.GlobalControllerRouter["github.com/udistrital/paz_y_salvos_mid/controllers:SemaforoController"] = append(beego.GlobalControllerRouter["github.com/udistrital/paz_y_salvos_mid/controllers:SemaforoController"],
 		beego.ControllerComments{
 			Method:           "ObtenerEstudiantesFacultadLaboratorios",
-			Router:           "/facultad/laboratorios/:id_coordinador_lab",
+			Router:           "/laboratorios/:id_coordinador_lab",
 			AllowHTTPMethods: []string{"get"},
 			MethodParams:     param.Make(),
 			Filters:          nil,
