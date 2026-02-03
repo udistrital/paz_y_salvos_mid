@@ -20,8 +20,58 @@
                 "tags": [
                     "semaforo"
                 ],
-                "description": "obtener todos los estudiantes",
+                "description": "obtener todos los estudiantes con filtros opcionales",
                 "operationId": "SemaforoController.ObtenerEstudiantes",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "description": "Número de registros por página",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "description": "Número de registros a saltar",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "codigo",
+                        "description": "Código del estudiante",
+                        "type": "string"
+                    },
+                    {
+                        "in": "query",
+                        "name": "idFacultad",
+                        "description": "ID de la facultad",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "idProyecto",
+                        "description": "ID del proyecto curricular",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "anio",
+                        "description": "Año de inscripción",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "periodo",
+                        "description": "Periodo de inscripción",
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "",
@@ -34,6 +84,85 @@
                     },
                     "503": {
                         "description": ""
+                    }
+                }
+            }
+        },
+        "/semaforo/asistente_proyecto/{cedula}": {
+            "get": {
+                "tags": [
+                    "semaforo"
+                ],
+                "description": "Obtiene los semáforos de los proyectos donde el usuario es asistente de proyecto",
+                "operationId": "SemaforoController.ObtenerSemaforosAsistente",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "cedula",
+                        "description": "Cédula del asistente",
+                        "required": true,
+                        "type": "string"
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "description": "Número de registros por página",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "description": "Número de registros a saltar",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "codigo",
+                        "description": "Código del estudiante",
+                        "type": "string"
+                    },
+                    {
+                        "in": "query",
+                        "name": "idProyecto",
+                        "description": "ID del proyecto Oikos",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "anio",
+                        "description": "Año de inscripción",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "periodo",
+                        "description": "Periodo de inscripción",
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.SemaforoTable"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "{object} requestresponse.APIResponse \"Parámetro 'cedula' es obligatorio\""
+                    },
+                    "404": {
+                        "description": "{object} requestresponse.APIResponse \"No se encontraron proyectos asignados\""
+                    },
+                    "503": {
+                        "description": "{object} requestresponse.APIResponse \"Error al consultar el servicio externo\""
                     }
                 }
             }
@@ -51,6 +180,20 @@
                         "name": "codigo",
                         "description": "Código del estudiante",
                         "required": true,
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "description": "Número de registros por página",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "description": "Número de registros a saltar",
                         "type": "integer",
                         "format": "int64"
                     }
@@ -77,39 +220,6 @@
                 }
             }
         },
-        "/semaforo/facultad/laboratorios/{id_coordinador_lab}": {
-            "get": {
-                "tags": [
-                    "semaforo"
-                ],
-                "description": "obtener estudiantes por facultad del coordinador de laboratorios",
-                "operationId": "SemaforoController.ObtenerEstudiantesFacultadLaboratorios",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "id_coordinador_lab",
-                        "description": "ID del coordinador de laboratorios",
-                        "required": true,
-                        "type": "integer",
-                        "format": "int64"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.SemaforoTable"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": ":id_coordinador_lab is empty"
-                    }
-                }
-            }
-        },
         "/semaforo/facultad/{id_secretario}": {
             "get": {
                 "tags": [
@@ -123,6 +233,47 @@
                         "name": "id_secretario",
                         "description": "ID del secretario académico",
                         "required": true,
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "description": "Número de registros por página",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "description": "Número de registros a saltar",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "codigo",
+                        "description": "Código del estudiante",
+                        "type": "string"
+                    },
+                    {
+                        "in": "query",
+                        "name": "idProyecto",
+                        "description": "ID del proyecto curricular",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "anio",
+                        "description": "Año de inscripción",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "periodo",
+                        "description": "Periodo de inscripción",
                         "type": "integer",
                         "format": "int64"
                     }
@@ -143,6 +294,80 @@
                 }
             }
         },
+        "/semaforo/laboratorios/{id_coordinador_lab}": {
+            "get": {
+                "tags": [
+                    "semaforo"
+                ],
+                "description": "obtener estudiantes por facultad del coordinador de laboratorios",
+                "operationId": "SemaforoController.ObtenerEstudiantesFacultadLaboratorios",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id_coordinador_lab",
+                        "description": "ID del coordinador de laboratorios",
+                        "required": true,
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "description": "Número de registros por página",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "description": "Número de registros a saltar",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "codigo",
+                        "description": "Código del estudiante",
+                        "type": "string"
+                    },
+                    {
+                        "in": "query",
+                        "name": "idProyecto",
+                        "description": "ID del proyecto curricular",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "anio",
+                        "description": "Año de inscripción",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "periodo",
+                        "description": "Periodo de inscripción",
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.SemaforoTable"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": ":id_coordinador_lab is empty"
+                    }
+                }
+            }
+        },
         "/semaforo/proyecto/{id_coordinador}": {
             "get": {
                 "tags": [
@@ -156,6 +381,40 @@
                         "name": "id_coordinador",
                         "description": "ID del coordinador",
                         "required": true,
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "description": "Número de registros por página",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "description": "Número de registros a saltar",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "codigo",
+                        "description": "Código del estudiante",
+                        "type": "string"
+                    },
+                    {
+                        "in": "query",
+                        "name": "anio",
+                        "description": "Año de inscripción",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
+                        "name": "periodo",
+                        "description": "Periodo de inscripción",
                         "type": "integer",
                         "format": "int64"
                     }
@@ -218,7 +477,22 @@
                 "NombreProyecto": {
                     "type": "string"
                 },
-                "Observacion": {
+                "ObservacionBiblioteca": {
+                    "type": "string"
+                },
+                "ObservacionBienestar": {
+                    "type": "string"
+                },
+                "ObservacionCoordinacion": {
+                    "type": "string"
+                },
+                "ObservacionLaboratorios": {
+                    "type": "string"
+                },
+                "ObservacionOrc": {
+                    "type": "string"
+                },
+                "ObservacionUrelinter": {
                     "type": "string"
                 },
                 "Orc": {
