@@ -1,11 +1,11 @@
 module github.com/udistrital/paz_y_salvos_mid
 
-go 1.22.0
+go 1.24.7
 
 require (
 	github.com/astaxie/beego v1.12.3
 	github.com/beego/beego v1.12.14
-	github.com/udistrital/utils_oas v0.0.0-20251106203309-c6f4d157fdb6
+	github.com/udistrital/utils_oas v0.1.0
 )
 
 require (
