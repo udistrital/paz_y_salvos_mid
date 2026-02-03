@@ -228,6 +228,7 @@ func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, 
 		beego.AppConfig.String("NscrudAcademica") +
 		"/coordinador_carrera_snies/" + id_coordinador
 
+	fmt.Println("Peticion proy coordinador: ", urlCoord)
 	var resCoord map[string]interface{}
 	if err := request.GetJsonWSO2(urlCoord, &resCoord); err != nil {
 		logs.Error("No se pudo obtener los proyectos del coordinador %s: %v", id_coordinador, err)
@@ -748,6 +749,7 @@ func consultarDataSemaforo(semaforos []models.Semaforo) []models.SemaforoTable {
 			beego.AppConfig.String("NscrudAcademica") +
 			"/datos_basicos_estudiante/" + fmt.Sprintf("%0.f", s.CodigoEstudiante)
 
+		fmt.Println("Peticion nombre estudiante: ", urlEst)
 		var resEst map[string]interface{}
 		if err := request.GetJsonWSO2(urlEst, &resEst); err != nil {
 			logs.Warn("No se pudo obtener nombre del estudiante %0.f: %v", s.CodigoEstudiante, err)
