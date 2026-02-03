@@ -15,8 +15,43 @@ paths:
     get:
       tags:
       - semaforo
-      description: obtener todos los estudiantes
+      description: obtener todos los estudiantes con filtros opcionales
       operationId: SemaforoController.ObtenerEstudiantes
+      parameters:
+      - in: query
+        name: limit
+        description: Número de registros por página
+        type: integer
+        format: int64
+      - in: query
+        name: offset
+        description: Número de registros a saltar
+        type: integer
+        format: int64
+      - in: query
+        name: codigo
+        description: Código del estudiante
+        type: string
+      - in: query
+        name: idFacultad
+        description: ID de la facultad
+        type: integer
+        format: int64
+      - in: query
+        name: idProyecto
+        description: ID del proyecto curricular
+        type: integer
+        format: int64
+      - in: query
+        name: anio
+        description: Año de inscripción
+        type: integer
+        format: int64
+      - in: query
+        name: periodo
+        description: Periodo de inscripción
+        type: integer
+        format: int64
       responses:
         "200":
           description: ""
@@ -26,6 +61,60 @@ paths:
               $ref: '#/definitions/models.SemaforoTable'
         "503":
           description: ""
+  /semaforo/asistente_proyecto/{cedula}:
+    get:
+      tags:
+      - semaforo
+      description: Obtiene los semáforos de los proyectos donde el usuario es asistente de proyecto
+      operationId: SemaforoController.ObtenerSemaforosAsistente
+      parameters:
+      - in: path
+        name: cedula
+        description: Cédula del asistente
+        required: true
+        type: string
+      - in: query
+        name: limit
+        description: Número de registros por página
+        type: integer
+        format: int64
+      - in: query
+        name: offset
+        description: Número de registros a saltar
+        type: integer
+        format: int64
+      - in: query
+        name: codigo
+        description: Código del estudiante
+        type: string
+      - in: query
+        name: idProyecto
+        description: ID del proyecto Oikos
+        type: integer
+        format: int64
+      - in: query
+        name: anio
+        description: Año de inscripción
+        type: integer
+        format: int64
+      - in: query
+        name: periodo
+        description: Periodo de inscripción
+        type: integer
+        format: int64
+      responses:
+        "200":
+          description: ""
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/models.SemaforoTable'
+        "400":
+          description: '{object} requestresponse.APIResponse "Parámetro ''cedula'' es obligatorio"'
+        "404":
+          description: '{object} requestresponse.APIResponse "No se encontraron proyectos asignados"'
+        "503":
+          description: '{object} requestresponse.APIResponse "Error al consultar el servicio externo"'
   /semaforo/estudiante/{codigo}:
     get:
       tags:
@@ -37,6 +126,16 @@ paths:
         name: codigo
         description: Código del estudiante
         required: true
+        type: integer
+        format: int64
+      - in: query
+        name: limit
+        description: Número de registros por página
+        type: integer
+        format: int64
+      - in: query
+        name: offset
+        description: Número de registros a saltar
         type: integer
         format: int64
       responses:
@@ -65,6 +164,35 @@ paths:
         required: true
         type: integer
         format: int64
+      - in: query
+        name: limit
+        description: Número de registros por página
+        type: integer
+        format: int64
+      - in: query
+        name: offset
+        description: Número de registros a saltar
+        type: integer
+        format: int64
+      - in: query
+        name: codigo
+        description: Código del estudiante
+        type: string
+      - in: query
+        name: idProyecto
+        description: ID del proyecto curricular
+        type: integer
+        format: int64
+      - in: query
+        name: anio
+        description: Año de inscripción
+        type: integer
+        format: int64
+      - in: query
+        name: periodo
+        description: Periodo de inscripción
+        type: integer
+        format: int64
       responses:
         "200":
           description: ""
@@ -74,7 +202,7 @@ paths:
               $ref: '#/definitions/models.SemaforoTable'
         "400":
           description: :id_secretario is empty
-  /semaforo/facultad/laboratorios/{id_coordinador_lab}:
+  /semaforo/laboratorios/{id_coordinador_lab}:
     get:
       tags:
       - semaforo
@@ -85,6 +213,35 @@ paths:
         name: id_coordinador_lab
         description: ID del coordinador de laboratorios
         required: true
+        type: integer
+        format: int64
+      - in: query
+        name: limit
+        description: Número de registros por página
+        type: integer
+        format: int64
+      - in: query
+        name: offset
+        description: Número de registros a saltar
+        type: integer
+        format: int64
+      - in: query
+        name: codigo
+        description: Código del estudiante
+        type: string
+      - in: query
+        name: idProyecto
+        description: ID del proyecto curricular
+        type: integer
+        format: int64
+      - in: query
+        name: anio
+        description: Año de inscripción
+        type: integer
+        format: int64
+      - in: query
+        name: periodo
+        description: Periodo de inscripción
         type: integer
         format: int64
       responses:
@@ -107,6 +264,30 @@ paths:
         name: id_coordinador
         description: ID del coordinador
         required: true
+        type: integer
+        format: int64
+      - in: query
+        name: limit
+        description: Número de registros por página
+        type: integer
+        format: int64
+      - in: query
+        name: offset
+        description: Número de registros a saltar
+        type: integer
+        format: int64
+      - in: query
+        name: codigo
+        description: Código del estudiante
+        type: string
+      - in: query
+        name: anio
+        description: Año de inscripción
+        type: integer
+        format: int64
+      - in: query
+        name: periodo
+        description: Periodo de inscripción
         type: integer
         format: int64
       responses:
@@ -148,7 +329,17 @@ definitions:
         type: string
       NombreProyecto:
         type: string
-      Observacion:
+      ObservacionBiblioteca:
+        type: string
+      ObservacionBienestar:
+        type: string
+      ObservacionCoordinacion:
+        type: string
+      ObservacionLaboratorios:
+        type: string
+      ObservacionOrc:
+        type: string
+      ObservacionUrelinter:
         type: string
       Orc:
         type: boolean
