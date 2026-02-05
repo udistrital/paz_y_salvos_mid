@@ -26,7 +26,7 @@ type Semaforo struct {
 	Laboratorios            bool
 	Bienestar               bool
 	Urelinter               bool
-	Orc                     bool
+	Orc                     *bool
 	ObservacionCoordinacion string
 	ObservacionBiblioteca   string
 	ObservacionLaboratorios string
@@ -52,7 +52,7 @@ type SemaforoTable struct {
 	Laboratorios            bool
 	Bienestar               bool
 	Urelinter               bool
-	Orc                     bool
+	Orc                     *bool
 	ObservacionCoordinacion string
 	ObservacionBiblioteca   string
 	ObservacionLaboratorios string
