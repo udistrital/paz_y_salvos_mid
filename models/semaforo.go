@@ -33,6 +33,7 @@ type Semaforo struct {
 	ObservacionBienestar    string
 	ObservacionUrelinter    string
 	ObservacionOrc          string
+	ObservacionFinanciera   string
 	Activo                  bool
 	FechaCreacion           time.Time
 	FechaModificacion       time.Time
@@ -59,6 +60,7 @@ type SemaforoTable struct {
 	ObservacionBienestar    string
 	ObservacionUrelinter    string
 	ObservacionOrc          string
+	ObservacionFinanciera   string
 }
 
 type SemaforosAsistenteResponse struct {
