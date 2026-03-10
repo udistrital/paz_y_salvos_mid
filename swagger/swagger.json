@@ -373,7 +373,7 @@
                 "tags": [
                     "semaforo"
                 ],
-                "description": "obtener estudiantes por proyectos del coordinador",
+                "description": "Obtiene los estudiantes de los proyectos del coordinador e incluye información de proyectos asignados",
                 "operationId": "SemaforoController.ObtenerEstudiantesProyecto",
                 "parameters": [
                     {
@@ -406,6 +406,13 @@
                     },
                     {
                         "in": "query",
+                        "name": "idProyecto",
+                        "description": "ID del proyecto Oikos",
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    {
+                        "in": "query",
                         "name": "anio",
                         "description": "Año de inscripción",
                         "type": "integer",
@@ -423,10 +430,7 @@
                     "200": {
                         "description": "",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.SemaforoTable"
-                            }
+                            "$ref": "#/definitions/models.SemaforoCoordinadorResponse"
                         }
                     },
                     "400": {
@@ -437,6 +441,48 @@
         }
     },
     "definitions": {
+        "models.ProyectoAsignado": {
+            "title": "ProyectoAsignado",
+            "type": "object",
+            "properties": {
+                "Codigo": {
+                    "type": "string"
+                },
+                "IdOikos": {
+                    "type": "integer",
+                    "format": "int64"
+                },
+                "Nombre": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.SemaforoCoordinadorResponse": {
+            "title": "SemaforoCoordinadorResponse",
+            "type": "object",
+            "properties": {
+                "Limit": {
+                    "type": "integer",
+                    "format": "int64"
+                },
+                "ProyectosAsignados": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ProyectoAsignado"
+                    }
+                },
+                "Semaforos": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.SemaforoTable"
+                    }
+                },
+                "TotalCount": {
+                    "type": "integer",
+                    "format": "int64"
+                }
+            }
+        },
         "models.SemaforoTable": {
             "title": "SemaforoTable",
             "type": "object",
@@ -484,6 +530,9 @@
                     "type": "string"
                 },
                 "ObservacionCoordinacion": {
+                    "type": "string"
+                },
+                "ObservacionFinanciera": {
                     "type": "string"
                 },
                 "ObservacionLaboratorios": {
