@@ -221,7 +221,7 @@ func ConsultarEstudiantes(limit int, offset int, codigo string, idFacultad int, 
 	return obtenerSemaforos(query, "No se encontraron estudiantes activos.")
 }
 
-func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, codigo string, anio int, periodo int) requestresponse.APIResponse {
+func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) requestresponse.APIResponse {
 	// 1. Consultar proyectos del coordinador
 	urlCoord := beego.AppConfig.String("ProtocolAdmin") + "://" +
 		beego.AppConfig.String("UrlcrudWSO2") +
@@ -246,12 +246,23 @@ func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, 
 			}
 		}
 	}
-	if len(codigosCondor) == 0 {
-		return requestresponse.APIResponseDTO(false, 404, nil, "El coordinador no tiene proyectos asociados.")
+
+	tieneProyectos := len(codigosCondor) > 0
+
+	if !tieneProyectos {
+		resp := models.SemaforoCoordinadorResponse{
+			Semaforos:          []models.SemaforoTable{},
+			Limit:              limit,
+			TotalCount:         0,
+			ProyectosAsignados: []models.ProyectoAsignado{},
+		}
+		return requestresponse.APIResponseDTO(false, 404, resp, "El coordinador no tiene proyectos asociados.")
 	}
 
 	// 2. Homologar con servicio de homologación
 	var idsOikos []int
+	proyectosMap := make(map[int]models.ProyectoAsignado)
+
 	for _, cod := range codigosCondor {
 		urlHom := beego.AppConfig.String("ProtocolAdmin") + "://" +
 			beego.AppConfig.String("UrlcrudWSO2") +
@@ -267,10 +278,33 @@ func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, 
 		if hom, ok := resHom["homologacion"].(map[string]interface{}); ok {
 			if idStr, ok := hom["id_oikos"].(string); ok {
 				if idInt, err := strconv.Atoi(idStr); err == nil {
-					idsOikos = append(idsOikos, idInt)
+					if _, existe := proyectosMap[idInt]; !existe {
+						idsOikos = append(idsOikos, idInt)
+						nombreProyecto := ""
+						urlOikos := beego.AppConfig.String("ProtocolAdmin") + "://" +
+							beego.AppConfig.String("UrlcrudOikos") +
+							"dependencia/" + idStr
+						var resOikos map[string]interface{}
+						if err := request.GetJson(urlOikos, &resOikos); err == nil {
+							if nombre, ok := resOikos["Nombre"].(string); ok {
+								nombreProyecto = nombre
+							}
+						}
+						proyectosMap[idInt] = models.ProyectoAsignado{
+							IdOikos: idInt,
+							Codigo:  cod,
+							Nombre:  strings.ToUpper(nombreProyecto),
+						}
+					}
 				}
 			}
 		}
+	}
+
+	// Convertir el mapa a slice
+	var proyectosAsignados []models.ProyectoAsignado
+	for _, proyecto := range proyectosMap {
+		proyectosAsignados = append(proyectosAsignados, proyecto)
 	}
 
 	if len(idsOikos) == 0 {
@@ -280,15 +314,31 @@ func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, 
 	// 3. Construir query con filtros
 	var queryParts []string
 
-	// Filtro de proyectos del coordinador con OR
-	proyectosQuery := "IdProyectoOikos:"
-	for i, id := range idsOikos {
-		if i > 0 {
-			proyectosQuery += "|"
+	// Si se proporciona idProyecto, filtrar solo por ese proyecto
+	if idProyecto > 0 {
+		// Verificar que el proyecto pertenece a los asignados al coordinador
+		proyectoValido := false
+		for _, id := range idsOikos {
+			if id == idProyecto {
+				proyectoValido = true
+				break
+			}
 		}
-		proyectosQuery += fmt.Sprintf("%d", id)
+		if !proyectoValido {
+			return requestresponse.APIResponseDTO(false, 403, nil, "El proyecto no está asignado al coordinador.")
+		}
+		queryParts = append(queryParts, fmt.Sprintf("IdProyectoOikos:%d", idProyecto))
+	} else {
+		// Si no se proporciona proyecto, usar todos los asignados
+		proyectosQuery := "IdProyectoOikos:"
+		for i, id := range idsOikos {
+			if i > 0 {
+				proyectosQuery += "|"
+			}
+			proyectosQuery += fmt.Sprintf("%d", id)
+		}
+		queryParts = append(queryParts, proyectosQuery)
 	}
-	queryParts = append(queryParts, proyectosQuery)
 	queryParts = append(queryParts, "Activo:true")
 
 	// Agregar filtros adicionales si están presentes
@@ -305,7 +355,47 @@ func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, 
 	queryString := strings.Join(queryParts, ",")
 	query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
 
-	return obtenerSemaforos(query, "No se encontraron estudiantes activos para los proyectos del coordinador.")
+	// Obtener los semáforos
+	resp := obtenerSemaforos(query, "No se encontraron estudiantes activos para los proyectos del coordinador.")
+
+	var semaforosTable []models.SemaforoTable
+	var totalCount int
+
+	if resp.Data != nil {
+		if dataMap, ok := resp.Data.(map[string]interface{}); ok {
+			switch arr := dataMap["Data"].(type) {
+			case []models.SemaforoTable:
+				semaforosTable = arr
+			case []interface{}:
+				var semaforosRaw []models.Semaforo
+				dataBytes, err := json.Marshal(arr)
+				if err == nil {
+					errUnmarshal := json.Unmarshal(dataBytes, &semaforosRaw)
+					if errUnmarshal == nil {
+						semaforosTable = consultarDataSemaforo(semaforosRaw)
+					}
+				}
+			}
+			if tc, ok := dataMap["TotalCount"].(int); ok {
+				totalCount = tc
+			} else if tcF, ok := dataMap["TotalCount"].(float64); ok {
+				totalCount = int(tcF)
+			}
+		}
+	}
+
+	if semaforosTable == nil {
+		semaforosTable = []models.SemaforoTable{}
+	}
+
+	resp.Data = models.SemaforoCoordinadorResponse{
+		Semaforos:          semaforosTable,
+		Limit:              limit,
+		TotalCount:         totalCount,
+		ProyectosAsignados: proyectosAsignados,
+	}
+
+	return resp
 }
 
 func ConsultarEstudiantesFacultad(id_secretario string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) requestresponse.APIResponse {

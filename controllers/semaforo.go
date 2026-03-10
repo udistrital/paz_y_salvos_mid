@@ -104,14 +104,15 @@ func (c *SemaforoController) ObtenerEstudiantes() {
 
 // ObtenerEstudiantesProyecto ...
 // @Title ObtenerEstudiantesProyecto
-// @Description obtener estudiantes por proyectos del coordinador
+// @Description Obtiene los estudiantes de los proyectos del coordinador e incluye información de proyectos asignados
 // @Param	id_coordinador	path 	int	true	"ID del coordinador"
 // @Param	limit	query	int	false	"Número de registros por página"
 // @Param	offset	query	int	false	"Número de registros a saltar"
 // @Param	codigo	query	string	false	"Código del estudiante"
+// @Param	idProyecto	query	int	false	"ID del proyecto Oikos"
 // @Param	anio	query	int	false	"Año de inscripción"
 // @Param	periodo	query	int	false	"Periodo de inscripción"
-// @Success 200 {object} []models.SemaforoTable
+// @Success 200 {object} models.SemaforoCoordinadorResponse
 // @Failure 400 :id_coordinador is empty
 // @router /proyecto/:id_coordinador [get]
 func (c *SemaforoController) ObtenerEstudiantesProyecto() {
@@ -122,10 +123,11 @@ func (c *SemaforoController) ObtenerEstudiantesProyecto() {
 
 		// Obtener parámetros de filtro opcionales
 		codigo := c.GetString("codigo")
+		idProyecto, _ := c.GetInt("idProyecto", 0)
 		anio, _ := c.GetInt("anio", 0)
 		periodo, _ := c.GetInt("periodo", 0)
 
-		resp := services.ConsultarEstudiantesProyecto(id_coordinador, limit, offset, codigo, anio, periodo)
+		resp := services.ConsultarEstudiantesProyecto(id_coordinador, limit, offset, codigo, idProyecto, anio, periodo)
 		helpers.RenderResponse(&c.Controller, resp)
 	}
 }

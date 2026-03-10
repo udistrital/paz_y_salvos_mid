@@ -70,3 +70,10 @@ type SemaforosAsistenteResponse struct {
 	TotalCount         int                `json:"TotalCount"`
 	ProyectosAsignados []ProyectoAsignado `json:"ProyectosAsignados"`
 }
+
+type SemaforoCoordinadorResponse struct {
+	Semaforos          []SemaforoTable    `json:"Semaforos"`
+	Limit              int                `json:"Limit"`
+	TotalCount         int                `json:"TotalCount"`
+	ProyectosAsignados []ProyectoAsignado `json:"ProyectosAsignados"`
+}
