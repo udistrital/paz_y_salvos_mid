@@ -6,8 +6,7 @@ main
 swagger/**
 !swagger/swagger.json
 !swagger/swagger.yml
-
 *.env
-!/.env
+!example.env
 *.exe*
 .exe~
