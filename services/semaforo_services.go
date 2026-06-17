@@ -18,10 +18,10 @@ import (
 // ConsultarSemaforosAsistente consulta los proyectos donde el usuario es asistente y retorna los semáforos de esos proyectos
 func ConsultarSemaforosAsistente(cedula string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) requestresponse.APIResponse {
 	// 1. Consultar proyectos donde es asistente
-	urlAsistente := beego.AppConfig.String("ProtocolAdmin") + "://" +
+	urlAsistente :=
 		beego.AppConfig.String("UrlcrudWSO2") +
-		beego.AppConfig.String("NscrudAcademica") +
-		"/asistente_proyecto/" + cedula
+			beego.AppConfig.String("NscrudAcademica") +
+			"/asistente_proyecto/" + cedula
 
 	var resAsistente map[string]interface{}
 	if err := request.GetJsonWSO2(urlAsistente, &resAsistente); err != nil {
@@ -58,10 +58,10 @@ func ConsultarSemaforosAsistente(cedula string, limit int, offset int, codigo st
 	var idsOikos []int
 	proyectosMap := make(map[int]models.ProyectoAsignado) // Mapa para eliminar duplicados por IdOikos
 	for _, cod := range proyectos {
-		urlHom := beego.AppConfig.String("ProtocolAdmin") + "://" +
+		urlHom :=
 			beego.AppConfig.String("UrlcrudWSO2") +
-			beego.AppConfig.String("NscrudHomologacion") +
-			"/proyecto_curricular_cod_proyecto/" + cod
+				beego.AppConfig.String("NscrudHomologacion") +
+				"/proyecto_curricular_cod_proyecto/" + cod
 
 		var resHom map[string]interface{}
 		if err := request.GetJsonWSO2(urlHom, &resHom); err != nil {
@@ -76,9 +76,9 @@ func ConsultarSemaforosAsistente(cedula string, limit int, offset int, codigo st
 						idsOikos = append(idsOikos, idInt)
 						// Obtener nombre del proyecto desde Oikos
 						nombreProyecto := ""
-						urlOikos := beego.AppConfig.String("ProtocolAdmin") + "://" +
+						urlOikos :=
 							beego.AppConfig.String("UrlcrudOikos") +
-							"dependencia/" + idStr
+								"dependencia/" + idStr
 						var resOikos map[string]interface{}
 						if err := request.GetJson(urlOikos, &resOikos); err == nil {
 							if nombre, ok := resOikos["Nombre"].(string); ok {
@@ -223,10 +223,10 @@ func ConsultarEstudiantes(limit int, offset int, codigo string, idFacultad int, 
 
 func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) requestresponse.APIResponse {
 	// 1. Consultar proyectos del coordinador
-	urlCoord := beego.AppConfig.String("ProtocolAdmin") + "://" +
+	urlCoord :=
 		beego.AppConfig.String("UrlcrudWSO2") +
-		beego.AppConfig.String("NscrudAcademica") +
-		"/coordinador_carrera_snies/" + id_coordinador
+			beego.AppConfig.String("NscrudAcademica") +
+			"/coordinador_carrera_snies/" + id_coordinador
 
 	var resCoord map[string]interface{}
 	if err := request.GetJsonWSO2(urlCoord, &resCoord); err != nil {
@@ -264,10 +264,10 @@ func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, 
 	proyectosMap := make(map[int]models.ProyectoAsignado)
 
 	for _, cod := range codigosCondor {
-		urlHom := beego.AppConfig.String("ProtocolAdmin") + "://" +
+		urlHom :=
 			beego.AppConfig.String("UrlcrudWSO2") +
-			beego.AppConfig.String("NscrudHomologacion") +
-			"/proyecto_curricular_cod_proyecto/" + cod
+				beego.AppConfig.String("NscrudHomologacion") +
+				"/proyecto_curricular_cod_proyecto/" + cod
 
 		var resHom map[string]interface{}
 		if err := request.GetJsonWSO2(urlHom, &resHom); err != nil {
@@ -281,9 +281,9 @@ func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, 
 					if _, existe := proyectosMap[idInt]; !existe {
 						idsOikos = append(idsOikos, idInt)
 						nombreProyecto := ""
-						urlOikos := beego.AppConfig.String("ProtocolAdmin") + "://" +
+						urlOikos :=
 							beego.AppConfig.String("UrlcrudOikos") +
-							"dependencia/" + idStr
+								"dependencia/" + idStr
 						var resOikos map[string]interface{}
 						if err := request.GetJson(urlOikos, &resOikos); err == nil {
 							if nombre, ok := resOikos["Nombre"].(string); ok {
@@ -400,15 +400,15 @@ func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, 
 
 func ConsultarEstudiantesFacultad(id_secretario string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) requestresponse.APIResponse {
 	// 1. Consultar facultades del secretario
-	// urlSec := beego.AppConfig.String("ProtocolAdmin") + "://" +
+	// urlSec :=
 	// 	beego.AppConfig.String("UrlcrudWSO2") +
 	// 	beego.AppConfig.String("NscrudAcademica") +
 	// 	"/facultad_secretaria/" + id_secretario
 
-	urlSec := beego.AppConfig.String("ProtocolAdmin") + "://" +
+	urlSec :=
 		beego.AppConfig.String("UrlcrudWSO2") +
-		"academica_pruebas" +
-		"/facultad_secretaria/" + id_secretario
+			"academica_pruebas" +
+			"/facultad_secretaria/" + id_secretario
 
 	var resSec map[string]interface{}
 	if err := request.GetJsonWSO2(urlSec, &resSec); err != nil {
@@ -436,10 +436,10 @@ func ConsultarEstudiantesFacultad(id_secretario string, limit int, offset int, c
 	// 2. Homologar con servicio de homologación
 	var idsOikos []int
 	for _, cod := range codigosCondor {
-		urlHom := beego.AppConfig.String("ProtocolAdmin") + "://" +
+		urlHom :=
 			beego.AppConfig.String("UrlcrudWSO2") +
-			beego.AppConfig.String("NscrudHomologacion") +
-			"/facultad_oikos_gedep/" + cod
+				beego.AppConfig.String("NscrudHomologacion") +
+				"/facultad_oikos_gedep/" + cod
 
 		var resHom map[string]interface{}
 		if err := request.GetJsonWSO2(urlHom, &resHom); err != nil {
@@ -503,11 +503,11 @@ func ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab string, limit i
 	// Obtener la fecha actual en formato YYYY-MM-DD
 	fechaActual := time.Now().Format("2006-01-02")
 
-	urlJefe := beego.AppConfig.String("ProtocolAdmin") + "://" +
+	urlJefe :=
 		beego.AppConfig.String("UrlcrudCore") +
-		"/jefe_dependencia?query=TerceroId:" + id_coordinador_lab +
-		",FechaFin__gte:" + fechaActual +
-		",FechaInicio__lte:" + fechaActual
+			"/jefe_dependencia?query=TerceroId:" + id_coordinador_lab +
+			",FechaFin__gte:" + fechaActual +
+			",FechaInicio__lte:" + fechaActual
 
 	var resJefe []models.JefeDependencia
 	if err := request.GetJson(urlJefe, &resJefe); err != nil {
@@ -518,9 +518,9 @@ func ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab string, limit i
 	var dependenciasConNombre []map[string]interface{}
 
 	for _, jefe := range resJefe {
-		urlDep := beego.AppConfig.String("ProtocolAdmin") + "://" +
+		urlDep :=
 			beego.AppConfig.String("UrlcrudOikos") +
-			"dependencia/" + fmt.Sprintf("%d", jefe.DependenciaId)
+				"dependencia/" + fmt.Sprintf("%d", jefe.DependenciaId)
 
 		var resDep map[string]interface{}
 		if err := request.GetJson(urlDep, &resDep); err != nil {
@@ -617,9 +617,9 @@ func ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab string, limit i
 			}
 
 			// Consultar información completa del laboratorio para obtener su padre
-			urlLabDep := beego.AppConfig.String("ProtocolAdmin") + "://" +
+			urlLabDep :=
 				beego.AppConfig.String("UrlcrudOikos") +
-				"dependencia_padre/?query=Hija:" + fmt.Sprintf("%d", labId)
+					"dependencia_padre/?query=Hija:" + fmt.Sprintf("%d", labId)
 
 			var resLabDep []interface{}
 			if err := request.GetJson(urlLabDep, &resLabDep); err != nil {
@@ -704,7 +704,7 @@ func obtenerSemaforos(query, notFoundMsg string) requestresponse.APIResponse {
 	var res map[string]interface{}
 	var semaforos []models.Semaforo
 
-	url := beego.AppConfig.String("ProtocolAdmin") + "://" +
+	url :=
 		beego.AppConfig.String("UrlCrudPazySalvos") + "/semaforo/" + query
 
 	if err := request.GetJson(url, &res); err != nil {
@@ -741,7 +741,7 @@ func obtenerSemaforos(query, notFoundMsg string) requestresponse.APIResponse {
 	}
 
 	var resCount map[string]interface{}
-	urlCount := beego.AppConfig.String("ProtocolAdmin") + "://" +
+	urlCount :=
 		beego.AppConfig.String("UrlCrudPazySalvos") + "/semaforo/" + queryCount
 
 	if err := request.GetJson(urlCount, &resCount); err == nil {
@@ -768,7 +768,7 @@ func obtenerSemaforosConFacultad(query, notFoundMsg string, idFacultadOikos int)
 	var res map[string]interface{}
 	var semaforos []models.Semaforo
 
-	url := beego.AppConfig.String("ProtocolAdmin") + "://" +
+	url :=
 		beego.AppConfig.String("UrlCrudPazySalvos") + "/semaforo/" + query
 
 	if err := request.GetJson(url, &res); err != nil {
@@ -805,7 +805,7 @@ func obtenerSemaforosConFacultad(query, notFoundMsg string, idFacultadOikos int)
 	}
 
 	var resCount map[string]interface{}
-	urlCount := beego.AppConfig.String("ProtocolAdmin") + "://" +
+	urlCount :=
 		beego.AppConfig.String("UrlCrudPazySalvos") + "/semaforo/" + queryCount
 
 	if err := request.GetJson(urlCount, &resCount); err == nil {
@@ -833,10 +833,10 @@ func consultarDataSemaforo(semaforos []models.Semaforo) []models.SemaforoTable {
 		var nombreFacultad, nombreProyecto, nombreEstudiante string
 
 		// 1. Nombre del estudiante
-		urlEst := beego.AppConfig.String("ProtocolAdmin") + "://" +
+		urlEst :=
 			beego.AppConfig.String("UrlcrudWSO2") +
-			beego.AppConfig.String("NscrudAcademica") +
-			"/datos_basicos_estudiante/" + fmt.Sprintf("%0.f", s.CodigoEstudiante)
+				beego.AppConfig.String("NscrudAcademica") +
+				"/datos_basicos_estudiante/" + fmt.Sprintf("%0.f", s.CodigoEstudiante)
 		var resEst map[string]interface{}
 		if err := request.GetJsonWSO2(urlEst, &resEst); err != nil {
 			logs.Warn("No se pudo obtener nombre del estudiante %0.f: %v", s.CodigoEstudiante, err)
@@ -853,9 +853,9 @@ func consultarDataSemaforo(semaforos []models.Semaforo) []models.SemaforoTable {
 		}
 
 		// 2. Nombre de la facultad
-		urlFac := beego.AppConfig.String("ProtocolAdmin") + "://" +
+		urlFac :=
 			beego.AppConfig.String("UrlcrudOikos") +
-			"dependencia/" + fmt.Sprintf("%d", s.IdFacultadOikos)
+				"dependencia/" + fmt.Sprintf("%d", s.IdFacultadOikos)
 
 		var resFac map[string]interface{}
 		if err := request.GetJson(urlFac, &resFac); err != nil {
@@ -867,9 +867,9 @@ func consultarDataSemaforo(semaforos []models.Semaforo) []models.SemaforoTable {
 		}
 
 		// // 3. Nombre del proyecto
-		urlProj := beego.AppConfig.String("ProtocolAdmin") + "://" +
+		urlProj :=
 			beego.AppConfig.String("UrlcrudOikos") +
-			"dependencia/" + fmt.Sprintf("%d", s.IdProyectoOikos)
+				"dependencia/" + fmt.Sprintf("%d", s.IdProyectoOikos)
 
 		var resProj map[string]interface{}
 		if err := request.GetJson(urlProj, &resProj); err != nil {
