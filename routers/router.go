@@ -8,9 +8,7 @@
 package routers
 
 import (
-	// "github.com/udistrital/paz_y_salvos_mid/controllers"
-
-	"github.com/astaxie/beego"
+	beego "github.com/beego/beego/v2/server/web"
 	"github.com/udistrital/paz_y_salvos_mid/controllers"
 )
 

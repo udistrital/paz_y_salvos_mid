@@ -11,6 +11,11 @@ type ProyectoAsignado struct {
 	Nombre  string `json:"Nombre"`
 }
 
+type DependenciaConNombre struct {
+	DependenciaId int
+	Nombre        string
+}
+
 type Semaforo struct {
 	Id                      int
 	CodigoEstudiante        float64
@@ -76,4 +81,15 @@ type SemaforoCoordinadorResponse struct {
 	Limit              int                `json:"Limit"`
 	TotalCount         int                `json:"TotalCount"`
 	ProyectosAsignados []ProyectoAsignado `json:"ProyectosAsignados"`
+}
+
+type SemaforosResponse struct {
+	Semaforos  []SemaforoTable `json:"Semaforos"`
+	Limit      int             `json:"Limit"`
+	TotalCount int             `json:"TotalCount"`
+}
+
+type SemaforosFacultadResponse struct {
+	SemaforosResponse
+	IdFacultadOikos int `json:"IdFacultadOikos"`
 }
