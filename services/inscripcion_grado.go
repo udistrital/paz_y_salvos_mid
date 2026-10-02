@@ -34,7 +34,6 @@ func falloGrado(status int, mensaje string) error {
 
 type estudianteGrado struct {
 	TerceroID int
-	Codigo    string
 	Ctx       context.Context
 }
 
@@ -112,108 +111,17 @@ func ctxAutorizado(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, "Authorization", token)
 }
 
-func resolverEstudiante(ctx context.Context, autorizacion string) (*estudianteGrado, error) {
+func resolverEstudiante(ctx context.Context, autorizacion string, terceroID int) (*estudianteGrado, error) {
 	if !strings.HasPrefix(autorizacion, "Bearer ") || len(strings.TrimPrefix(autorizacion, "Bearer ")) < 10 {
 		return nil, falloGrado(http.StatusUnauthorized, "Sesión no autenticada")
 	}
-	ctx = ctxAutorizado(ctx, autorizacion)
-	infoURL, err := baseGrado("UrlAuthUserInfo")
-	if err != nil {
-		return nil, err
+	if usuario, ok := ctx.Value("user").(string); !ok || strings.TrimSpace(usuario) == "" {
+		return nil, falloGrado(http.StatusUnauthorized, "La sesión no es válida")
 	}
-	var info struct {
-		Documento string          `json:"documento"`
-		Email     string          `json:"email"`
-		Codigo    string          `json:"Codigo"`
-		Role      json.RawMessage `json:"role"`
+	if terceroID <= 0 {
+		return nil, falloGrado(http.StatusBadRequest, "Tercero requerido")
 	}
-	status, err := request.GetWithContext(ctx, strings.TrimRight(infoURL, "/"), &info)
-	if err != nil {
-		if status == 400 || status == 401 || status == 403 {
-			return nil, falloGrado(401, "La sesión no es válida. Inicia sesión nuevamente.")
-		}
-		return nil, falloGrado(503, "No fue posible contactar el servicio de autenticación. Intenta nuevamente.")
-	}
-	info.Email = strings.TrimSpace(info.Email)
-	info.Documento = strings.TrimSpace(info.Documento)
-	if info.Email == "" {
-		return nil, falloGrado(http.StatusUnauthorized, "La sesión no contiene una identidad verificable")
-	}
-	var roles []string
-	if err := json.Unmarshal(info.Role, &roles); err != nil {
-		var texto string
-		if json.Unmarshal(info.Role, &texto) == nil {
-			roles = strings.Split(texto, ",")
-		}
-	}
-	tieneRol := func(codigos []string) bool {
-		for _, rol := range codigos {
-			if strings.TrimSpace(rol) == "ESTUDIANTE" {
-				return true
-			}
-		}
-		return false
-	}
-	// El correo procede exclusivamente de userinfo validado con el token.
-	if info.Codigo == "" || info.Documento == "" || !tieneRol(roles) {
-		authURL, err := baseGrado("UrlAutenticacionMid")
-		if err != nil {
-			return nil, err
-		}
-		var payload json.RawMessage
-		if _, err := request.PostWithContext(ctx, authURL+"token/userRol", map[string]string{"user": info.Email}, &payload); err != nil {
-			return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo consultar el código estudiantil")
-		}
-		var perfil struct {
-			Codigo    string   `json:"Codigo"`
-			Documento string   `json:"documento"`
-			Role      []string `json:"role"`
-		}
-		if err := json.Unmarshal(payload, &perfil); err != nil {
-			return nil, falloGrado(http.StatusServiceUnavailable, "Respuesta de identidad inválida")
-		}
-		perfil.Documento = strings.TrimSpace(perfil.Documento)
-		if info.Documento != "" && perfil.Documento != "" && perfil.Documento != info.Documento {
-			return nil, falloGrado(http.StatusForbidden, "La identidad académica no coincide")
-		}
-		if info.Documento == "" {
-			info.Documento = perfil.Documento
-		}
-		info.Codigo = perfil.Codigo
-		roles = perfil.Role
-	}
-	if strings.TrimSpace(info.Codigo) == "" || info.Documento == "" || strings.ContainsAny(info.Documento, ",:|&") || !tieneRol(roles) {
-		return nil, falloGrado(http.StatusForbidden, "No se acreditó la condición de estudiante")
-	}
-	tercerosURL, err := baseGrado("UrlTercerosCrud")
-	if err != nil {
-		return nil, err
-	}
-	query := url.Values{"query": {"Numero:" + info.Documento + ",Activo:true"}, "limit": {"100"}}
-	var raw json.RawMessage
-	if _, err := request.GetWithContext(ctx, tercerosURL+"datos_identificacion?"+query.Encode(), &raw); err != nil {
-		return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo consultar Terceros")
-	}
-	var ident []struct {
-		TerceroId struct {
-			Id int `json:"Id"`
-		} `json:"TerceroId"`
-	}
-	ident, err = listaGrado[struct {
-		TerceroId struct {
-			Id int `json:"Id"`
-		} `json:"TerceroId"`
-	}](raw)
-	if err != nil || len(ident) == 0 {
-		return nil, falloGrado(http.StatusForbidden, "Tercero del estudiante no verificable")
-	}
-	terceroID := ident[0].TerceroId.Id
-	for _, dato := range ident {
-		if terceroID <= 0 || dato.TerceroId.Id != terceroID {
-			return nil, falloGrado(403, "Tercero del estudiante no verificable")
-		}
-	}
-	return &estudianteGrado{TerceroID: terceroID, Codigo: strings.TrimSpace(info.Codigo), Ctx: ctx}, nil
+	return &estudianteGrado{TerceroID: terceroID, Ctx: ctxAutorizado(ctx, autorizacion)}, nil
 }
 
 func resolverEstadoBorrador(ctx context.Context) (int, error) {
@@ -556,10 +464,10 @@ func contenidoGradoValido(raw json.RawMessage) bool {
 }
 
 func CrearBorradorGrado(ctx context.Context, auth string, entrada models.CrearBorradorGrado) (*models.BorradorGrado, error) {
-	if entrada.PeriodoId <= 0 || entrada.ProgramaAcademicoId <= 0 || !contenidoGradoValido(entrada.Contenido) {
+	if entrada.TerceroId <= 0 || entrada.PeriodoId <= 0 || entrada.ProgramaAcademicoId <= 0 || !contenidoGradoValido(entrada.Contenido) {
 		return nil, falloGrado(400, "Datos del borrador inválidos")
 	}
-	user, err := resolverEstudiante(ctx, auth)
+	user, err := resolverEstudiante(ctx, auth, entrada.TerceroId)
 	if err != nil {
 		return nil, err
 	}
@@ -604,11 +512,11 @@ func CrearBorradorGrado(ctx context.Context, auth string, entrada models.CrearBo
 	return &resp.Data, nil
 }
 
-func ObtenerBorradorGrado(ctx context.Context, auth string, periodoID, programaID int) (*models.BorradorGrado, error) {
-	if periodoID <= 0 || programaID <= 0 {
-		return nil, falloGrado(400, "Periodo y programa requeridos")
+func ObtenerBorradorGrado(ctx context.Context, auth string, terceroID, periodoID, programaID int) (*models.BorradorGrado, error) {
+	if terceroID <= 0 || periodoID <= 0 || programaID <= 0 {
+		return nil, falloGrado(400, "Tercero, periodo y programa requeridos")
 	}
-	user, err := resolverEstudiante(ctx, auth)
+	user, err := resolverEstudiante(ctx, auth, terceroID)
 	if err != nil {
 		return nil, err
 	}
@@ -652,11 +560,11 @@ func ObtenerBorradorGrado(ctx context.Context, auth string, periodoID, programaI
 	return &resp.Data, nil
 }
 
-func GuardarBorradorGrado(ctx context.Context, auth string, id int, contenido json.RawMessage) (*models.BorradorGrado, error) {
-	if id <= 0 || !contenidoGradoValido(contenido) {
+func GuardarBorradorGrado(ctx context.Context, auth string, id, terceroID int, contenido json.RawMessage) (*models.BorradorGrado, error) {
+	if id <= 0 || terceroID <= 0 || !contenidoGradoValido(contenido) {
 		return nil, falloGrado(400, "Contenido inválido")
 	}
-	user, err := resolverEstudiante(ctx, auth)
+	user, err := resolverEstudiante(ctx, auth, terceroID)
 	if err != nil {
 		return nil, err
 	}
@@ -705,7 +613,7 @@ func GuardarBorradorGrado(ctx context.Context, auth string, id int, contenido js
 	if err := validarVentana(eventoGrado{}, apr, false); err != nil {
 		return nil, err
 	}
-	status, err = request.PutWithContext(user.Ctx, path, models.GuardarBorradorGrado{Contenido: contenido}, &resp)
+	status, err = request.PutWithContext(user.Ctx, path, map[string]interface{}{"Contenido": contenido}, &resp)
 	if err != nil {
 		if status == 409 {
 			return nil, falloGrado(409, "La versión ya no es editable")

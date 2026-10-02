@@ -14,8 +14,8 @@ import (
 
 var cedulaGrado = regexp.MustCompile(`^[1-9][0-9]{0,37}$`)
 
-func ListarDirectoresGrado(ctx context.Context, auth string) ([]models.DirectorGrado, error) {
-	user, err := resolverEstudiante(ctx, auth)
+func ListarDirectoresGrado(ctx context.Context, auth string, terceroID int) ([]models.DirectorGrado, error) {
+	user, err := resolverEstudiante(ctx, auth, terceroID)
 	if err != nil {
 		return nil, err
 	}
@@ -40,11 +40,11 @@ func ListarDirectoresGrado(ctx context.Context, auth string) ([]models.DirectorG
 	return resp.Data, nil
 }
 
-func ValidarDirectorGrado(ctx context.Context, auth, identificacion string) error {
+func ValidarDirectorGrado(ctx context.Context, auth string, terceroID int, identificacion string) error {
 	if !cedulaGrado.MatchString(identificacion) {
 		return falloGrado(http.StatusBadRequest, "Director inválido")
 	}
-	user, err := resolverEstudiante(ctx, auth)
+	user, err := resolverEstudiante(ctx, auth, terceroID)
 	if err != nil {
 		return err
 	}
@@ -68,8 +68,8 @@ func ValidarDirectorGrado(ctx context.Context, auth, identificacion string) erro
 	return nil
 }
 
-func ListarModalidadesGrado(ctx context.Context, auth string) ([]models.ModalidadGrado, error) {
-	user, err := resolverEstudiante(ctx, auth)
+func ListarModalidadesGrado(ctx context.Context, auth string, terceroID int) ([]models.ModalidadGrado, error) {
+	user, err := resolverEstudiante(ctx, auth, terceroID)
 	if err != nil {
 		return nil, err
 	}
@@ -94,11 +94,11 @@ func ListarModalidadesGrado(ctx context.Context, auth string) ([]models.Modalida
 	return resp.Data, nil
 }
 
-func ValidarModalidadGrado(ctx context.Context, auth string, codigo int64) error {
+func ValidarModalidadGrado(ctx context.Context, auth string, terceroID int, codigo int64) error {
 	if codigo <= 0 {
 		return falloGrado(http.StatusBadRequest, "Modalidad inválida")
 	}
-	user, err := resolverEstudiante(ctx, auth)
+	user, err := resolverEstudiante(ctx, auth, terceroID)
 	if err != nil {
 		return err
 	}

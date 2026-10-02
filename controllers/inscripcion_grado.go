@@ -58,13 +58,14 @@ func (c *InscripcionGradoController) CrearBorrador() {
 }
 
 func (c *InscripcionGradoController) ObtenerBorrador() {
+	tercero, e0 := c.GetInt("tercero_id")
 	periodo, e1 := c.GetInt("periodo_id")
 	programa, e2 := c.GetInt("programa_id")
-	if e1 != nil || e2 != nil || periodo <= 0 || programa <= 0 {
-		c.respuesta(400, nil, "Periodo y programa requeridos")
+	if e0 != nil || e1 != nil || e2 != nil || tercero <= 0 || periodo <= 0 || programa <= 0 {
+		c.respuesta(400, nil, "Tercero, periodo y programa requeridos")
 		return
 	}
-	res, err := services.ObtenerBorradorGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), periodo, programa)
+	res, err := services.ObtenerBorradorGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), tercero, periodo, programa)
 	if err != nil {
 		c.errorGrado(err)
 		return
@@ -82,7 +83,7 @@ func (c *InscripcionGradoController) GuardarBorrador() {
 	if !c.jsonEntrada(&entrada) {
 		return
 	}
-	res, err := services.GuardarBorradorGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), id, entrada.Contenido)
+	res, err := services.GuardarBorradorGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), id, entrada.TerceroId, entrada.Contenido)
 	if err != nil {
 		c.errorGrado(err)
 		return
@@ -109,7 +110,12 @@ func (c *InscripcionGradoController) Radicar() {
 }
 
 func (c *InscripcionGradoController) ListarDirectores() {
-	directores, err := services.ListarDirectoresGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"))
+	tercero, err := c.GetInt("tercero_id")
+	if err != nil || tercero <= 0 {
+		c.respuesta(400, nil, "Tercero requerido")
+		return
+	}
+	directores, err := services.ListarDirectoresGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), tercero)
 	if err != nil {
 		c.errorGrado(err)
 		return
@@ -118,7 +124,12 @@ func (c *InscripcionGradoController) ListarDirectores() {
 }
 
 func (c *InscripcionGradoController) ListarModalidades() {
-	modalidades, err := services.ListarModalidadesGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"))
+	tercero, err := c.GetInt("tercero_id")
+	if err != nil || tercero <= 0 {
+		c.respuesta(400, nil, "Tercero requerido")
+		return
+	}
+	modalidades, err := services.ListarModalidadesGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), tercero)
 	if err != nil {
 		c.errorGrado(err)
 		return
@@ -128,11 +139,12 @@ func (c *InscripcionGradoController) ListarModalidades() {
 
 func (c *InscripcionGradoController) ListarSoportes() {
 	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
-	if err != nil || id <= 0 {
+	tercero, errTercero := c.GetInt("tercero_id")
+	if err != nil || errTercero != nil || id <= 0 || tercero <= 0 {
 		c.respuesta(400, nil, "Solicitud inválida")
 		return
 	}
-	res, err := services.ListarSoportesGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), id)
+	res, err := services.ListarSoportesGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), id, tercero)
 	if err != nil {
 		c.errorGrado(err)
 		return
@@ -164,11 +176,12 @@ func (c *InscripcionGradoController) CargarSoporte() {
 
 func (c *InscripcionGradoController) DescargarSoporte() {
 	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
-	if err != nil || id <= 0 {
+	tercero, errTercero := c.GetInt("tercero_id")
+	if err != nil || errTercero != nil || id <= 0 || tercero <= 0 {
 		c.respuesta(400, nil, "Solicitud inválida")
 		return
 	}
-	res, err := services.DescargarSoporteGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), id, c.Ctx.Input.Param(":tipo"))
+	res, err := services.DescargarSoporteGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), id, tercero, c.Ctx.Input.Param(":tipo"))
 	if err != nil {
 		c.errorGrado(err)
 		return

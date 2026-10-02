@@ -10,6 +10,7 @@ type SoporteGrado struct {
 }
 
 type CargarSoporteGrado struct {
+	TerceroId       int    `json:"TerceroId"`
 	FormularioId    int    `json:"FormularioId"`
 	SoporteActualId int    `json:"SoporteActualId"`
 	Nombre          string `json:"Nombre"`

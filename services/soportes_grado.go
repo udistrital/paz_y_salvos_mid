@@ -56,11 +56,11 @@ func validarPDFGrado(encoded, mime string) ([]byte, error) {
 	return contenido, nil
 }
 
-func borradorParaSoportes(ctx context.Context, auth string, id int, permitirRadicada bool) (*estudianteGrado, *models.BorradorGrado, int, error) {
-	if id <= 0 {
+func borradorParaSoportes(ctx context.Context, auth string, id, terceroID int, permitirRadicada bool) (*estudianteGrado, *models.BorradorGrado, int, error) {
+	if id <= 0 || terceroID <= 0 {
 		return nil, nil, 0, falloGrado(400, "Solicitud inválida")
 	}
-	user, err := resolverEstudiante(ctx, auth)
+	user, err := resolverEstudiante(ctx, auth, terceroID)
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -190,8 +190,8 @@ func archivoDocumentoGrado(ctx context.Context, doc *documentoGrado) (*models.Ar
 	return &models.ArchivoSoporteGrado{Nombre: doc.Nombre, MimeType: "application/pdf", Archivo: archivo.File}, contenido, nil
 }
 
-func ListarSoportesGrado(ctx context.Context, auth string, id int) ([]models.SoporteBorradorGrado, error) {
-	user, b, _, err := borradorParaSoportes(ctx, auth, id, true)
+func ListarSoportesGrado(ctx context.Context, auth string, id, terceroID int) ([]models.SoporteBorradorGrado, error) {
+	user, b, _, err := borradorParaSoportes(ctx, auth, id, terceroID, true)
 	if err != nil {
 		return nil, err
 	}
@@ -218,11 +218,11 @@ func ListarSoportesGrado(ctx context.Context, auth string, id int) ([]models.Sop
 	return resultado, nil
 }
 
-func DescargarSoporteGrado(ctx context.Context, auth string, id int, codigo string) (*models.ArchivoSoporteGrado, error) {
+func DescargarSoporteGrado(ctx context.Context, auth string, id, terceroID int, codigo string) (*models.ArchivoSoporteGrado, error) {
 	if _, err := codigoDocumentoGrado(codigo); err != nil {
 		return nil, err
 	}
-	user, b, _, err := borradorParaSoportes(ctx, auth, id, true)
+	user, b, _, err := borradorParaSoportes(ctx, auth, id, terceroID, true)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +257,7 @@ func CargarSoporteGrado(ctx context.Context, auth string, id int, codigo string,
 	if err != nil {
 		return nil, err
 	}
-	user, b, estado, err := borradorParaSoportes(ctx, auth, id, false)
+	user, b, estado, err := borradorParaSoportes(ctx, auth, id, entrada.TerceroId, false)
 	if err != nil {
 		return nil, err
 	}

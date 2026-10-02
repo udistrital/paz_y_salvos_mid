@@ -2,19 +2,20 @@ package models
 
 import "encoding/json"
 
-// Las escrituras públicas solo incluyen selección y contenido del formulario;
-// identidad, dependencia, eventos y estado se resuelven en el MID.
 type CrearBorradorGrado struct {
+	TerceroId           int             `json:"TerceroId"`
 	PeriodoId           int             `json:"PeriodoId"`
 	ProgramaAcademicoId int             `json:"ProgramaAcademicoId"`
 	Contenido           json.RawMessage `json:"Contenido"`
 }
 
 type GuardarBorradorGrado struct {
+	TerceroId int             `json:"TerceroId"`
 	Contenido json.RawMessage `json:"Contenido"`
 }
 
 type RadicarGrado struct {
+	TerceroId    int             `json:"TerceroId"`
 	FormularioId int             `json:"FormularioId"`
 	Contenido    json.RawMessage `json:"Contenido"`
 }

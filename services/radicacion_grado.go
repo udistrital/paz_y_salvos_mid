@@ -86,14 +86,14 @@ func validarContenidoRadicacionGrado(raw json.RawMessage) (json.RawMessage, camp
 }
 
 func RadicarGrado(ctx context.Context, auth string, id int, entrada models.RadicarGrado) (*models.BorradorGrado, error) {
-	if id <= 0 || entrada.FormularioId <= 0 {
+	if id <= 0 || entrada.TerceroId <= 0 || entrada.FormularioId <= 0 {
 		return nil, falloGrado(400, "Solicitud o versión inválida")
 	}
 	contenido, campos, err := validarContenidoRadicacionGrado(entrada.Contenido)
 	if err != nil {
 		return nil, err
 	}
-	user, borrador, estadoBorrador, err := borradorParaSoportes(ctx, auth, id, false)
+	user, borrador, estadoBorrador, err := borradorParaSoportes(ctx, auth, id, entrada.TerceroId, false)
 	if err != nil {
 		return nil, err
 	}
@@ -114,15 +114,15 @@ func RadicarGrado(ctx context.Context, auth string, id int, entrada models.Radic
 	if err := validarVentana(inscripcion, aprobacion, true); err != nil {
 		return nil, err
 	}
-	if err := ValidarDirectorGrado(ctx, auth, campos.Director1); err != nil {
+	if err := ValidarDirectorGrado(ctx, auth, entrada.TerceroId, campos.Director1); err != nil {
 		return nil, err
 	}
 	if campos.Director2 != "" {
-		if err := ValidarDirectorGrado(ctx, auth, campos.Director2); err != nil {
+		if err := ValidarDirectorGrado(ctx, auth, entrada.TerceroId, campos.Director2); err != nil {
 			return nil, err
 		}
 	}
-	if err := ValidarModalidadGrado(ctx, auth, campos.Modalidad); err != nil {
+	if err := ValidarModalidadGrado(ctx, auth, entrada.TerceroId, campos.Modalidad); err != nil {
 		return nil, err
 	}
 	tipos := make([]int, 0, len(tiposSoporteGrado))
