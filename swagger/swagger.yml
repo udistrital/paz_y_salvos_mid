@@ -110,11 +110,11 @@ paths:
             items:
               $ref: '#/definitions/models.SemaforoTable'
         "400":
-          description: '{object} requestresponse.APIResponse "Parámetro ''cedula'' es obligatorio"'
+          description: '{object} models.APIResponse "Parámetro ''cedula'' es obligatorio"'
         "404":
-          description: '{object} requestresponse.APIResponse "No se encontraron proyectos asignados"'
+          description: '{object} models.APIResponse "No se encontraron proyectos asignados"'
         "503":
-          description: '{object} requestresponse.APIResponse "Error al consultar el servicio externo"'
+          description: '{object} models.APIResponse "Error al consultar el servicio externo"'
   /semaforo/estudiante/{codigo}:
     get:
       tags:
@@ -146,11 +146,11 @@ paths:
             items:
               $ref: '#/definitions/models.SemaforoTable'
         "400":
-          description: '{object} requestresponse.APIResponse "Parámetro ''codigo'' es obligatorio"'
+          description: '{object} models.APIResponse "Parámetro ''codigo'' es obligatorio"'
         "404":
-          description: '{object} requestresponse.APIResponse "Estudiante no encontrado"'
+          description: '{object} models.APIResponse "Estudiante no encontrado"'
         "503":
-          description: '{object} requestresponse.APIResponse "Error al consultar el servicio externo"'
+          description: '{object} models.APIResponse "Error al consultar el servicio externo"'
   /semaforo/facultad/{id_secretario}:
     get:
       tags:

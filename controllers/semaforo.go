@@ -1,10 +1,9 @@
 package controllers
 
 import (
-	"github.com/astaxie/beego"
+	beego "github.com/beego/beego/v2/server/web"
 	"github.com/udistrital/paz_y_salvos_mid/helpers"
 	"github.com/udistrital/paz_y_salvos_mid/services"
-	"github.com/udistrital/utils_oas/errorhandler"
 )
 
 // SemaforoController operations for Semaforo
@@ -31,13 +30,13 @@ func (c *SemaforoController) URLMapping() {
 // @Param	idProyecto	query	int	false	"ID del proyecto Oikos"
 // @Param	anio	query	int	false	"Año de inscripción"
 // @Param	periodo	query	int	false	"Periodo de inscripción"
-// @Success 200 {object} []models.SemaforoTable
-// @Failure 400 {object} requestresponse.APIResponse "Parámetro 'cedula' es obligatorio"
-// @Failure 404 {object} requestresponse.APIResponse "No se encontraron proyectos asignados"
-// @Failure 503 {object} requestresponse.APIResponse "Error al consultar el servicio externo"
+// @Success 200 {object} models.APIResponse
+// @Failure 400 {object} models.APIResponse "Parámetro 'cedula' es obligatorio"
+// @Failure 404 {object} models.APIResponse "No se encontraron proyectos asignados"
+// @Failure 503 {object} models.APIResponse "Error al consultar el servicio externo"
 // @router /asistente_proyecto/:cedula [get]
 func (c *SemaforoController) ObtenerSemaforosAsistente() {
-	defer errorhandler.HandlePanic(&c.Controller)
+	defer helpers.HandlePanic(&c.Controller)
 	if cedula, ok := helpers.GetPathParamOrError(&c.Controller, "cedula"); ok {
 		limit, _ := c.GetInt("limit", 10)
 		offset, _ := c.GetInt("offset", 0)
@@ -45,7 +44,7 @@ func (c *SemaforoController) ObtenerSemaforosAsistente() {
 		idProyecto, _ := c.GetInt("idProyecto", 0)
 		anio, _ := c.GetInt("anio", 0)
 		periodo, _ := c.GetInt("periodo", 0)
-		resp := services.ConsultarSemaforosAsistente(cedula, limit, offset, codigo, idProyecto, anio, periodo)
+		resp := services.ConsultarSemaforosAsistente(c.Ctx.Request.Context(), cedula, limit, offset, codigo, idProyecto, anio, periodo)
 		helpers.RenderResponse(&c.Controller, resp)
 	}
 }
@@ -56,18 +55,18 @@ func (c *SemaforoController) ObtenerSemaforosAsistente() {
 // @Param	codigo	path	int	true	"Código del estudiante"
 // @Param	limit	query	int	false	"Número de registros por página"
 // @Param	offset	query	int	false	"Número de registros a saltar"
-// @Success 200 {array} models.SemaforoTable
-// @Failure 400 {object} requestresponse.APIResponse "Parámetro 'codigo' es obligatorio"
-// @Failure 404 {object} requestresponse.APIResponse "Estudiante no encontrado"
-// @Failure 503 {object} requestresponse.APIResponse "Error al consultar el servicio externo"
+// @Success 200 {object} models.APIResponse
+// @Failure 400 {object} models.APIResponse "Parámetro 'codigo' es obligatorio"
+// @Failure 404 {object} models.APIResponse "Estudiante no encontrado"
+// @Failure 503 {object} models.APIResponse "Error al consultar el servicio externo"
 // @router /estudiante/:codigo [get]
 func (c *SemaforoController) ObtenerEstudiante() {
-	defer errorhandler.HandlePanic(&c.Controller)
+	defer helpers.HandlePanic(&c.Controller)
 
 	if codigo, ok := helpers.GetPathParamOrError(&c.Controller, "codigo"); ok {
 		limit, _ := c.GetInt("limit", 10)
 		offset, _ := c.GetInt("offset", 0)
-		resp := services.ConsultarEstudiante(codigo, limit, offset)
+		resp := services.ConsultarEstudiante(c.Ctx.Request.Context(), codigo, limit, offset)
 		helpers.RenderResponse(&c.Controller, resp)
 	}
 }
@@ -82,11 +81,11 @@ func (c *SemaforoController) ObtenerEstudiante() {
 // @Param	idProyecto	query	int	false	"ID del proyecto curricular"
 // @Param	anio	query	int	false	"Año de inscripción"
 // @Param	periodo	query	int	false	"Periodo de inscripción"
-// @Success 200 {object} []models.SemaforoTable
-// @Failure 503
+// @Success 200 {object} models.APIResponse
+// @Failure 503 {object} models.APIResponse
 // @router / [get]
 func (c *SemaforoController) ObtenerEstudiantes() {
-	defer errorhandler.HandlePanic(&c.Controller)
+	defer helpers.HandlePanic(&c.Controller)
 
 	limit, _ := c.GetInt("limit", 10)
 	offset, _ := c.GetInt("offset", 0)
@@ -98,7 +97,7 @@ func (c *SemaforoController) ObtenerEstudiantes() {
 	anio, _ := c.GetInt("anio", 0)
 	periodo, _ := c.GetInt("periodo", 0)
 
-	resp := services.ConsultarEstudiantes(limit, offset, codigo, idFacultad, idProyecto, anio, periodo)
+	resp := services.ConsultarEstudiantes(c.Ctx.Request.Context(), limit, offset, codigo, idFacultad, idProyecto, anio, periodo)
 	helpers.RenderResponse(&c.Controller, resp)
 }
 
@@ -112,11 +111,11 @@ func (c *SemaforoController) ObtenerEstudiantes() {
 // @Param	idProyecto	query	int	false	"ID del proyecto Oikos"
 // @Param	anio	query	int	false	"Año de inscripción"
 // @Param	periodo	query	int	false	"Periodo de inscripción"
-// @Success 200 {object} models.SemaforoCoordinadorResponse
-// @Failure 400 :id_coordinador is empty
+// @Success 200 {object} models.APIResponse
+// @Failure 400 {object} models.APIResponse ":id_coordinador is empty"
 // @router /proyecto/:id_coordinador [get]
 func (c *SemaforoController) ObtenerEstudiantesProyecto() {
-	defer errorhandler.HandlePanic(&c.Controller)
+	defer helpers.HandlePanic(&c.Controller)
 	if id_coordinador, ok := helpers.GetPathParamOrError(&c.Controller, "id_coordinador"); ok {
 		limit, _ := c.GetInt("limit", 10)
 		offset, _ := c.GetInt("offset", 0)
@@ -127,7 +126,7 @@ func (c *SemaforoController) ObtenerEstudiantesProyecto() {
 		anio, _ := c.GetInt("anio", 0)
 		periodo, _ := c.GetInt("periodo", 0)
 
-		resp := services.ConsultarEstudiantesProyecto(id_coordinador, limit, offset, codigo, idProyecto, anio, periodo)
+		resp := services.ConsultarEstudiantesProyecto(c.Ctx.Request.Context(), id_coordinador, limit, offset, codigo, idProyecto, anio, periodo)
 		helpers.RenderResponse(&c.Controller, resp)
 	}
 }
@@ -142,11 +141,11 @@ func (c *SemaforoController) ObtenerEstudiantesProyecto() {
 // @Param	idProyecto	query	int	false	"ID del proyecto curricular"
 // @Param	anio	query	int	false	"Año de inscripción"
 // @Param	periodo	query	int	false	"Periodo de inscripción"
-// @Success 200 {object} []models.SemaforoTable
-// @Failure 400 :id_secretario is empty
+// @Success 200 {object} models.APIResponse
+// @Failure 400 {object} models.APIResponse ":id_secretario is empty"
 // @router /facultad/:id_secretario [get]
 func (c *SemaforoController) ObtenerEstudiantesFacultad() {
-	defer errorhandler.HandlePanic(&c.Controller)
+	defer helpers.HandlePanic(&c.Controller)
 
 	if id_secretario, ok := helpers.GetPathParamOrError(&c.Controller, "id_secretario"); ok {
 		limit, _ := c.GetInt("limit", 10)
@@ -158,7 +157,7 @@ func (c *SemaforoController) ObtenerEstudiantesFacultad() {
 		anio, _ := c.GetInt("anio", 0)
 		periodo, _ := c.GetInt("periodo", 0)
 
-		resp := services.ConsultarEstudiantesFacultad(id_secretario, limit, offset, codigo, idProyecto, anio, periodo)
+		resp := services.ConsultarEstudiantesFacultad(c.Ctx.Request.Context(), id_secretario, limit, offset, codigo, idProyecto, anio, periodo)
 		helpers.RenderResponse(&c.Controller, resp)
 	}
 }
@@ -173,11 +172,11 @@ func (c *SemaforoController) ObtenerEstudiantesFacultad() {
 // @Param	idProyecto	query	int	false	"ID del proyecto curricular"
 // @Param	anio	query	int	false	"Año de inscripción"
 // @Param	periodo	query	int	false	"Periodo de inscripción"
-// @Success 200 {object} []models.SemaforoTable
-// @Failure 400 :id_coordinador_lab is empty
+// @Success 200 {object} models.APIResponse
+// @Failure 400 {object} models.APIResponse ":id_coordinador_lab is empty"
 // @router /laboratorios/:id_coordinador_lab [get]
 func (c *SemaforoController) ObtenerEstudiantesFacultadLaboratorios() {
-	defer errorhandler.HandlePanic(&c.Controller)
+	defer helpers.HandlePanic(&c.Controller)
 
 	if id_coordinador_lab, ok := helpers.GetPathParamOrError(&c.Controller, "id_coordinador_lab"); ok {
 		limit, _ := c.GetInt("limit", 10)
@@ -189,7 +188,7 @@ func (c *SemaforoController) ObtenerEstudiantesFacultadLaboratorios() {
 		anio, _ := c.GetInt("anio", 0)
 		periodo, _ := c.GetInt("periodo", 0)
 
-		resp := services.ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab, limit, offset, codigo, idProyecto, anio, periodo)
+		resp := services.ConsultarEstudiantesFacultadLaboratorios(c.Ctx.Request.Context(), id_coordinador_lab, limit, offset, codigo, idProyecto, anio, periodo)
 		helpers.RenderResponse(&c.Controller, resp)
 	}
 }

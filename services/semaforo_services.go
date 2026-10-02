@@ -1,44 +1,43 @@
 package services
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"strconv"
+	"net/http"
 	"strings"
 	"time"
 
-	"github.com/astaxie/beego"
-	"github.com/astaxie/beego/logs"
+	"github.com/beego/beego/v2/core/logs"
 	"github.com/udistrital/paz_y_salvos_mid/helpers"
 	"github.com/udistrital/paz_y_salvos_mid/models"
-	"github.com/udistrital/utils_oas/request"
-	"github.com/udistrital/utils_oas/requestresponse"
+	"github.com/udistrital/utils_oas/v2/request"
 )
 
+const authorizationContextKey = "Authorization"
+
+func externalRequestContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, authorizationContextKey, "")
+}
+
 // ConsultarSemaforosAsistente consulta los proyectos donde el usuario es asistente y retorna los semáforos de esos proyectos
-func ConsultarSemaforosAsistente(cedula string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) requestresponse.APIResponse {
+func ConsultarSemaforosAsistente(ctx context.Context, cedula string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) models.APIResponse {
+	ctx = externalRequestContext(ctx)
 	// 1. Consultar proyectos donde es asistente
 	urlAsistente :=
-		beego.AppConfig.String("UrlcrudWSO2") +
-			beego.AppConfig.String("NscrudAcademica") +
+		helpers.ConfigString("UrlcrudWSO2") +
+			helpers.ConfigString("NscrudAcademica") +
 			"/asistente_proyecto/" + cedula
 
-	var resAsistente map[string]interface{}
-	if err := request.GetJsonWSO2(urlAsistente, &resAsistente); err != nil {
+	var resAsistente models.AsistenteProyectoResponse
+	if _, err := request.GetWithContext(ctx, urlAsistente, &resAsistente); err != nil {
 		logs.Error("No se pudo obtener los proyectos del asistente %s: %v", cedula, err)
-		return requestresponse.APIResponseDTO(false, 503, nil, "No se pudo consultar los proyectos del asistente.")
+		return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "No se pudo consultar los proyectos del asistente.", Data: nil}
 	}
 
-	proyectos := []string{}
-	if asistente, ok := resAsistente["asistente"].(map[string]interface{}); ok {
-		if lista, ok := asistente["proyectos"].([]interface{}); ok {
-			for _, item := range lista {
-				if proyecto, ok := item.(map[string]interface{}); ok {
-					if cod, ok := proyecto["proyecto"].(string); ok {
-						proyectos = append(proyectos, cod)
-					}
-				}
-			}
+	proyectos := make([]string, 0, len(resAsistente.Asistente.Proyectos))
+	for _, proyecto := range resAsistente.Asistente.Proyectos {
+		if proyecto.Proyecto != "" {
+			proyectos = append(proyectos, proyecto.Proyecto)
 		}
 	}
 	// Validar si es asistente por la cantidad de proyectos obtenidos
@@ -51,7 +50,7 @@ func ConsultarSemaforosAsistente(cedula string, limit int, offset int, codigo st
 			Limit:       limit,
 			TotalCount:  0,
 		}
-		return requestresponse.APIResponseDTO(false, 404, resp, "El asistente no tiene proyectos asignados.")
+		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "El asistente no tiene proyectos asignados.", Data: resp}
 	}
 
 	// 2. Homologar con servicio de homologación
@@ -59,38 +58,29 @@ func ConsultarSemaforosAsistente(cedula string, limit int, offset int, codigo st
 	proyectosMap := make(map[int]models.ProyectoAsignado) // Mapa para eliminar duplicados por IdOikos
 	for _, cod := range proyectos {
 		urlHom :=
-			beego.AppConfig.String("UrlcrudWSO2") +
-				beego.AppConfig.String("NscrudHomologacion") +
+			helpers.ConfigString("UrlcrudWSO2") +
+				helpers.ConfigString("NscrudHomologacion") +
 				"/proyecto_curricular_cod_proyecto/" + cod
 
-		var resHom map[string]interface{}
-		if err := request.GetJsonWSO2(urlHom, &resHom); err != nil {
+		var resHom models.HomologacionResponse
+		if _, err := request.GetWithContext(ctx, urlHom, &resHom); err != nil {
 			logs.Warn("Error al consultar homologación para proyecto %s: %v", cod, err)
 			continue
 		}
-		if hom, ok := resHom["homologacion"].(map[string]interface{}); ok {
-			if idStr, ok := hom["id_oikos"].(string); ok {
-				if idInt, err := strconv.Atoi(idStr); err == nil {
-					// Solo agregar si no existe ya en el mapa (evita duplicados por IdOikos)
-					if _, existe := proyectosMap[idInt]; !existe {
-						idsOikos = append(idsOikos, idInt)
-						// Obtener nombre del proyecto desde Oikos
-						nombreProyecto := ""
-						urlOikos :=
-							beego.AppConfig.String("UrlcrudOikos") +
-								"dependencia/" + idStr
-						var resOikos map[string]interface{}
-						if err := request.GetJson(urlOikos, &resOikos); err == nil {
-							if nombre, ok := resOikos["Nombre"].(string); ok {
-								nombreProyecto = nombre
-							}
-						}
-						proyectosMap[idInt] = models.ProyectoAsignado{
-							IdOikos: idInt,
-							Codigo:  cod,
-							Nombre:  strings.ToUpper(nombreProyecto),
-						}
-					}
+		idOikos := resHom.OikosId()
+		if idOikos > 0 {
+			// Solo agregar si no existe ya en el mapa (evita duplicados por IdOikos)
+			if _, existe := proyectosMap[idOikos]; !existe {
+				idsOikos = append(idsOikos, idOikos)
+				urlOikos := helpers.ConfigString("UrlcrudOikos") + "dependencia/" + fmt.Sprintf("%d", idOikos)
+				var resOikos models.DependenciaOikos
+				if _, err := request.GetWithContext(ctx, urlOikos, &resOikos); err != nil {
+					logs.Warn("No se pudo obtener información del proyecto %d: %v", idOikos, err)
+				}
+				proyectosMap[idOikos] = models.ProyectoAsignado{
+					IdOikos: idOikos,
+					Codigo:  cod,
+					Nombre:  strings.ToUpper(resOikos.Nombre),
 				}
 			}
 		}
@@ -102,7 +92,7 @@ func ConsultarSemaforosAsistente(cedula string, limit int, offset int, codigo st
 	}
 
 	if len(idsOikos) == 0 {
-		return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron proyectos oikos para el asistente.")
+		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "No se encontraron proyectos oikos para el asistente.", Data: nil}
 	}
 
 	// 3. Construir query con filtros
@@ -118,7 +108,7 @@ func ConsultarSemaforosAsistente(cedula string, limit int, offset int, codigo st
 			}
 		}
 		if !proyectoValido {
-			return requestresponse.APIResponseDTO(false, 403, nil, "El proyecto no está asignado al asistente.")
+			return models.APIResponse{Success: false, Status: http.StatusForbidden, Message: "El proyecto no está asignado al asistente.", Data: nil}
 		}
 		queryParts = append(queryParts, fmt.Sprintf("IdProyectoOikos:%d", idProyecto))
 	} else {
@@ -146,32 +136,14 @@ func ConsultarSemaforosAsistente(cedula string, limit int, offset int, codigo st
 	query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
 
 	// Obtener los semáforos normalmente
-	resp := obtenerSemaforos(query, "No se encontraron estudiantes activos para los proyectos del asistente.")
+	resp := obtenerSemaforos(ctx, query, "No se encontraron estudiantes activos para los proyectos del asistente.")
 
 	var semaforosTable []models.SemaforoTable
 	var totalCount int
 
-	if resp.Data != nil {
-		if dataMap, ok := resp.Data.(map[string]interface{}); ok {
-			switch arr := dataMap["Data"].(type) {
-			case []models.SemaforoTable:
-				semaforosTable = arr
-			case []interface{}:
-				var semaforosRaw []models.Semaforo
-				dataBytes, err := json.Marshal(arr)
-				if err == nil {
-					errUnmarshal := json.Unmarshal(dataBytes, &semaforosRaw)
-					if errUnmarshal == nil {
-						semaforosTable = consultarDataSemaforo(semaforosRaw)
-					}
-				}
-			}
-			if tc, ok := dataMap["TotalCount"].(int); ok {
-				totalCount = tc
-			} else if tcF, ok := dataMap["TotalCount"].(float64); ok {
-				totalCount = int(tcF)
-			}
-		}
+	if result, ok := resp.Data.(models.SemaforosResponse); ok {
+		semaforosTable = result.Semaforos
+		totalCount = result.TotalCount
 	}
 
 	if semaforosTable == nil {
@@ -187,12 +159,14 @@ func ConsultarSemaforosAsistente(cedula string, limit int, offset int, codigo st
 	return resp
 }
 
-func ConsultarEstudiante(codigo string, limit int, offset int) requestresponse.APIResponse {
+func ConsultarEstudiante(ctx context.Context, codigo string, limit int, offset int) models.APIResponse {
+	ctx = externalRequestContext(ctx)
 	query := fmt.Sprintf("?query=CodigoEstudiante:%s,Activo:true&limit=%d&offset=%d", codigo, limit, offset)
-	return obtenerSemaforos(query, "No se encontró información del estudiante.")
+	return obtenerSemaforos(ctx, query, "No se encontró información del estudiante.")
 }
 
-func ConsultarEstudiantes(limit int, offset int, codigo string, idFacultad int, idProyecto int, anio int, periodo int) requestresponse.APIResponse {
+func ConsultarEstudiantes(ctx context.Context, limit int, offset int, codigo string, idFacultad int, idProyecto int, anio int, periodo int) models.APIResponse {
+	ctx = externalRequestContext(ctx)
 	// Construir query dinámicamente con filtros activos
 	var queryParts []string
 	queryParts = append(queryParts, "Activo:true")
@@ -218,32 +192,27 @@ func ConsultarEstudiantes(limit int, offset int, codigo string, idFacultad int, 
 	// Construir el query
 	query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
 
-	return obtenerSemaforos(query, "No se encontraron estudiantes activos.")
+	return obtenerSemaforos(ctx, query, "No se encontraron estudiantes activos.")
 }
 
-func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) requestresponse.APIResponse {
+func ConsultarEstudiantesProyecto(ctx context.Context, id_coordinador string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) models.APIResponse {
+	ctx = externalRequestContext(ctx)
 	// 1. Consultar proyectos del coordinador
 	urlCoord :=
-		beego.AppConfig.String("UrlcrudWSO2") +
-			beego.AppConfig.String("NscrudAcademica") +
+		helpers.ConfigString("UrlcrudWSO2") +
+			helpers.ConfigString("NscrudAcademica") +
 			"/coordinador_carrera_snies/" + id_coordinador
 
-	var resCoord map[string]interface{}
-	if err := request.GetJsonWSO2(urlCoord, &resCoord); err != nil {
+	var resCoord models.CoordinadorCarreraResponse
+	if _, err := request.GetWithContext(ctx, urlCoord, &resCoord); err != nil {
 		logs.Error("No se pudo obtener los proyectos del coordinador %s: %v", id_coordinador, err)
-		return requestresponse.APIResponseDTO(false, 503, nil, "No se pudo consultar los proyectos del coordinador.")
+		return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "No se pudo consultar los proyectos del coordinador.", Data: nil}
 	}
 
 	var codigosCondor []string
-	if collection, ok := resCoord["coordinadorCollection"].(map[string]interface{}); ok {
-		if lista, ok := collection["coordinador"].([]interface{}); ok {
-			for _, item := range lista {
-				if proyecto, ok := item.(map[string]interface{}); ok {
-					if cod, ok := proyecto["codigo_condor"].(string); ok {
-						codigosCondor = append(codigosCondor, cod)
-					}
-				}
-			}
+	for _, coordinador := range resCoord.CoordinadorCollection.Coordinadores {
+		if coordinador.CodigoCondor != "" {
+			codigosCondor = append(codigosCondor, coordinador.CodigoCondor)
 		}
 	}
 
@@ -256,7 +225,7 @@ func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, 
 			TotalCount:         0,
 			ProyectosAsignados: []models.ProyectoAsignado{},
 		}
-		return requestresponse.APIResponseDTO(false, 404, resp, "El coordinador no tiene proyectos asociados.")
+		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "El coordinador no tiene proyectos asociados.", Data: resp}
 	}
 
 	// 2. Homologar con servicio de homologación
@@ -265,37 +234,29 @@ func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, 
 
 	for _, cod := range codigosCondor {
 		urlHom :=
-			beego.AppConfig.String("UrlcrudWSO2") +
-				beego.AppConfig.String("NscrudHomologacion") +
+			helpers.ConfigString("UrlcrudWSO2") +
+				helpers.ConfigString("NscrudHomologacion") +
 				"/proyecto_curricular_cod_proyecto/" + cod
 
-		var resHom map[string]interface{}
-		if err := request.GetJsonWSO2(urlHom, &resHom); err != nil {
+		var resHom models.HomologacionResponse
+		if _, err := request.GetWithContext(ctx, urlHom, &resHom); err != nil {
 			logs.Warn("Error al consultar homologación para proyecto %s: %v", cod, err)
 			continue
 		}
 
-		if hom, ok := resHom["homologacion"].(map[string]interface{}); ok {
-			if idStr, ok := hom["id_oikos"].(string); ok {
-				if idInt, err := strconv.Atoi(idStr); err == nil {
-					if _, existe := proyectosMap[idInt]; !existe {
-						idsOikos = append(idsOikos, idInt)
-						nombreProyecto := ""
-						urlOikos :=
-							beego.AppConfig.String("UrlcrudOikos") +
-								"dependencia/" + idStr
-						var resOikos map[string]interface{}
-						if err := request.GetJson(urlOikos, &resOikos); err == nil {
-							if nombre, ok := resOikos["Nombre"].(string); ok {
-								nombreProyecto = nombre
-							}
-						}
-						proyectosMap[idInt] = models.ProyectoAsignado{
-							IdOikos: idInt,
-							Codigo:  cod,
-							Nombre:  strings.ToUpper(nombreProyecto),
-						}
-					}
+		idOikos := resHom.OikosId()
+		if idOikos > 0 {
+			if _, existe := proyectosMap[idOikos]; !existe {
+				idsOikos = append(idsOikos, idOikos)
+				urlOikos := helpers.ConfigString("UrlcrudOikos") + "dependencia/" + fmt.Sprintf("%d", idOikos)
+				var resOikos models.DependenciaOikos
+				if _, err := request.GetWithContext(ctx, urlOikos, &resOikos); err != nil {
+					logs.Warn("No se pudo obtener información del proyecto %d: %v", idOikos, err)
+				}
+				proyectosMap[idOikos] = models.ProyectoAsignado{
+					IdOikos: idOikos,
+					Codigo:  cod,
+					Nombre:  strings.ToUpper(resOikos.Nombre),
 				}
 			}
 		}
@@ -308,7 +269,7 @@ func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, 
 	}
 
 	if len(idsOikos) == 0 {
-		return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron proyectos oikos para el coordinador.")
+		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "No se encontraron proyectos oikos para el coordinador.", Data: nil}
 	}
 
 	// 3. Construir query con filtros
@@ -325,7 +286,7 @@ func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, 
 			}
 		}
 		if !proyectoValido {
-			return requestresponse.APIResponseDTO(false, 403, nil, "El proyecto no está asignado al coordinador.")
+			return models.APIResponse{Success: false, Status: http.StatusForbidden, Message: "El proyecto no está asignado al coordinador.", Data: nil}
 		}
 		queryParts = append(queryParts, fmt.Sprintf("IdProyectoOikos:%d", idProyecto))
 	} else {
@@ -356,32 +317,14 @@ func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, 
 	query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
 
 	// Obtener los semáforos
-	resp := obtenerSemaforos(query, "No se encontraron estudiantes activos para los proyectos del coordinador.")
+	resp := obtenerSemaforos(ctx, query, "No se encontraron estudiantes activos para los proyectos del coordinador.")
 
 	var semaforosTable []models.SemaforoTable
 	var totalCount int
 
-	if resp.Data != nil {
-		if dataMap, ok := resp.Data.(map[string]interface{}); ok {
-			switch arr := dataMap["Data"].(type) {
-			case []models.SemaforoTable:
-				semaforosTable = arr
-			case []interface{}:
-				var semaforosRaw []models.Semaforo
-				dataBytes, err := json.Marshal(arr)
-				if err == nil {
-					errUnmarshal := json.Unmarshal(dataBytes, &semaforosRaw)
-					if errUnmarshal == nil {
-						semaforosTable = consultarDataSemaforo(semaforosRaw)
-					}
-				}
-			}
-			if tc, ok := dataMap["TotalCount"].(int); ok {
-				totalCount = tc
-			} else if tcF, ok := dataMap["TotalCount"].(float64); ok {
-				totalCount = int(tcF)
-			}
-		}
+	if result, ok := resp.Data.(models.SemaforosResponse); ok {
+		semaforosTable = result.Semaforos
+		totalCount = result.TotalCount
 	}
 
 	if semaforosTable == nil {
@@ -398,66 +341,57 @@ func ConsultarEstudiantesProyecto(id_coordinador string, limit int, offset int, 
 	return resp
 }
 
-func ConsultarEstudiantesFacultad(id_secretario string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) requestresponse.APIResponse {
+func ConsultarEstudiantesFacultad(ctx context.Context, id_secretario string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) models.APIResponse {
+	ctx = externalRequestContext(ctx)
 	// 1. Consultar facultades del secretario
 	// urlSec :=
-	// 	beego.AppConfig.String("UrlcrudWSO2") +
-	// 	beego.AppConfig.String("NscrudAcademica") +
+	// 	helpers.ConfigString("UrlcrudWSO2") +
+	// 	helpers.ConfigString("NscrudAcademica") +
 	// 	"/facultad_secretaria/" + id_secretario
 
 	urlSec :=
-		beego.AppConfig.String("UrlcrudWSO2") +
+		helpers.ConfigString("UrlcrudWSO2") +
 			"academica_pruebas" +
 			"/facultad_secretaria/" + id_secretario
 
-	var resSec map[string]interface{}
-	if err := request.GetJsonWSO2(urlSec, &resSec); err != nil {
+	var resSec models.FacultadesSecretariaResponse
+	if _, err := request.GetWithContext(ctx, urlSec, &resSec); err != nil {
 		logs.Error("No se pudo obtener las facultades del secretario %s: %v", id_secretario, err)
-		return requestresponse.APIResponseDTO(false, 503, nil, "No se pudo consultar las facultades del secretario.")
+		return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "No se pudo consultar las facultades del secretario.", Data: nil}
 	}
 
 	var codigosCondor []string
-	if facultades, ok := resSec["facultades"].(map[string]interface{}); ok {
-		if secretaria, ok := facultades["secretaria"].([]interface{}); ok {
-			for _, item := range secretaria {
-				if fac, ok := item.(map[string]interface{}); ok {
-					if cod, ok := fac["SEC_DEP_COD"].(string); ok {
-						codigosCondor = append(codigosCondor, cod)
-					}
-				}
-			}
+	for _, facultad := range resSec.Facultades.Secretarias {
+		if facultad.Codigo != "" {
+			codigosCondor = append(codigosCondor, facultad.Codigo)
 		}
 	}
 
 	if len(codigosCondor) == 0 {
-		return requestresponse.APIResponseDTO(false, 404, nil, "El secretario no tiene facultades asociadas.")
+		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "El secretario no tiene facultades asociadas.", Data: nil}
 	}
 
 	// 2. Homologar con servicio de homologación
 	var idsOikos []int
 	for _, cod := range codigosCondor {
 		urlHom :=
-			beego.AppConfig.String("UrlcrudWSO2") +
-				beego.AppConfig.String("NscrudHomologacion") +
+			helpers.ConfigString("UrlcrudWSO2") +
+				helpers.ConfigString("NscrudHomologacion") +
 				"/facultad_oikos_gedep/" + cod
 
-		var resHom map[string]interface{}
-		if err := request.GetJsonWSO2(urlHom, &resHom); err != nil {
+		var resHom models.HomologacionResponse
+		if _, err := request.GetWithContext(ctx, urlHom, &resHom); err != nil {
 			logs.Warn("Error al consultar homologación para facultad %s: %v", cod, err)
 			continue
 		}
 
-		if hom, ok := resHom["homologacion"].(map[string]interface{}); ok {
-			if idStr, ok := hom["id_oikos"].(string); ok {
-				if idInt, err := strconv.Atoi(idStr); err == nil {
-					idsOikos = append(idsOikos, idInt)
-				}
-			}
+		if idOikos := resHom.OikosId(); idOikos > 0 {
+			idsOikos = append(idsOikos, idOikos)
 		}
 	}
 
 	if len(idsOikos) == 0 {
-		return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron facultades oikos para el secretario.")
+		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "No se encontraron facultades oikos para el secretario.", Data: nil}
 	}
 
 	// 3. Construir query con OR para facultades
@@ -494,58 +428,52 @@ func ConsultarEstudiantesFacultad(id_secretario string, limit int, offset int, c
 		idFacultadOikos = idsOikos[0]
 	}
 
-	return obtenerSemaforosConFacultad(query, "No se encontraron estudiantes activos en las facultades del secretario.", idFacultadOikos)
+	return obtenerSemaforosConFacultad(ctx, query, "No se encontraron estudiantes activos en las facultades del secretario.", idFacultadOikos)
 }
 
-func ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) requestresponse.APIResponse {
+func ConsultarEstudiantesFacultadLaboratorios(ctx context.Context, id_coordinador_lab string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) models.APIResponse {
+	ctx = externalRequestContext(ctx)
 
 	// 1. Consultar de que dependencias es jefe
 	// Obtener la fecha actual en formato YYYY-MM-DD
 	fechaActual := time.Now().Format("2006-01-02")
 
 	urlJefe :=
-		beego.AppConfig.String("UrlcrudCore") +
+		helpers.ConfigString("UrlcrudCore") +
 			"/jefe_dependencia?query=TerceroId:" + id_coordinador_lab +
 			",FechaFin__gte:" + fechaActual +
 			",FechaInicio__lte:" + fechaActual
 
 	var resJefe []models.JefeDependencia
-	if err := request.GetJson(urlJefe, &resJefe); err != nil {
+	if _, err := request.GetWithContext(ctx, urlJefe, &resJefe); err != nil {
 		logs.Error("No se pudo obtener las dependencias del jefe %s: %v", id_coordinador_lab, err)
-		return requestresponse.APIResponseDTO(false, 503, nil, "No se pudo consultar las dependencias del jefe de laboratorios.")
+		return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "No se pudo consultar las dependencias del jefe de laboratorios.", Data: nil}
 	}
 
-	var dependenciasConNombre []map[string]interface{}
+	var dependenciasConNombre []models.DependenciaConNombre
 
 	for _, jefe := range resJefe {
 		urlDep :=
-			beego.AppConfig.String("UrlcrudOikos") +
+			helpers.ConfigString("UrlcrudOikos") +
 				"dependencia/" + fmt.Sprintf("%d", jefe.DependenciaId)
 
-		var resDep map[string]interface{}
-		if err := request.GetJson(urlDep, &resDep); err != nil {
+		var resDep models.DependenciaOikos
+		if _, err := request.GetWithContext(ctx, urlDep, &resDep); err != nil {
 			logs.Warn("No se pudo obtener información de la dependencia %d: %v", jefe.DependenciaId, err)
 			continue
 		}
 
-		nombre := ""
-		if n, ok := resDep["Nombre"].(string); ok {
-			nombre = n
-		}
-
-		dependenciasConNombre = append(dependenciasConNombre, map[string]interface{}{
-			"DependenciaId": jefe.DependenciaId,
-			"Nombre":        nombre,
+		dependenciasConNombre = append(dependenciasConNombre, models.DependenciaConNombre{
+			DependenciaId: jefe.DependenciaId,
+			Nombre:        resDep.Nombre,
 		})
 	}
 
 	// Filtrar solo dependencias cuyo nombre contiene "laboratorio" (ignorando mayúsculas/minúsculas)
-	var laboratorios []map[string]interface{}
+	var laboratorios []models.DependenciaConNombre
 	for _, dep := range dependenciasConNombre {
-		if nombre, ok := dep["Nombre"].(string); ok {
-			if len(nombre) > 0 && (helpers.ContainsIgnoreCase(nombre, "laboratorio") || helpers.ContainsIgnoreCase(nombre, "laboratorios")) {
-				laboratorios = append(laboratorios, dep)
-			}
+		if dep.Nombre != "" && helpers.ContainsIgnoreCase(dep.Nombre, "laboratorio") {
+			laboratorios = append(laboratorios, dep)
 		}
 	}
 
@@ -555,12 +483,10 @@ func ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab string, limit i
 		// Se usa el id obtenido en dependencias con nombre para armar el query y obtener el semaforo
 		var idsDependencias []int
 		for _, dep := range dependenciasConNombre {
-			if id, ok := dep["DependenciaId"].(int); ok {
-				idsDependencias = append(idsDependencias, id)
-			}
+			idsDependencias = append(idsDependencias, dep.DependenciaId)
 		}
 		if len(idsDependencias) == 0 {
-			return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron dependencias asociadas al decano.")
+			return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "No se encontraron dependencias asociadas al decano.", Data: nil}
 		}
 
 		// Construir query con filtros adicionales
@@ -597,7 +523,7 @@ func ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab string, limit i
 			idFacultadOikos = idsDependencias[0]
 		}
 
-		return obtenerSemaforosConFacultad(query, "No se encontraron estudiantes activos en las facultades asociadas al decano.", idFacultadOikos)
+		return obtenerSemaforosConFacultad(ctx, query, "No se encontraron estudiantes activos en las facultades asociadas al decano.", idFacultadOikos)
 
 	} else {
 		// Se consulta la dependencia padre de las dependencias obtenidas
@@ -607,10 +533,7 @@ func ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab string, limit i
 		facultadesMap := make(map[int]bool) // Para rastrear facultades únicas
 
 		for _, lab := range laboratorios {
-			labId := 0
-			if id, ok := lab["DependenciaId"].(int); ok {
-				labId = id
-			}
+			labId := lab.DependenciaId
 
 			if labId == 0 {
 				continue
@@ -618,42 +541,27 @@ func ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab string, limit i
 
 			// Consultar información completa del laboratorio para obtener su padre
 			urlLabDep :=
-				beego.AppConfig.String("UrlcrudOikos") +
+				helpers.ConfigString("UrlcrudOikos") +
 					"dependencia_padre/?query=Hija:" + fmt.Sprintf("%d", labId)
 
-			var resLabDep []interface{}
-			if err := request.GetJson(urlLabDep, &resLabDep); err != nil {
+			var resLabDep []models.DependenciaPadreOikos
+			if _, err := request.GetWithContext(ctx, urlLabDep, &resLabDep); err != nil {
 				logs.Warn("No se pudo obtener información completa del laboratorio %d: %v", labId, err)
 				continue
 			}
 
-			// La respuesta es un array, procesar cada elemento
-			for _, item := range resLabDep {
-				if relacion, ok := item.(map[string]interface{}); ok {
-					// Extraer el ID de la facultad desde el campo Padre
-					if padre, ok := relacion["Padre"].(map[string]interface{}); ok {
-						if padreId, ok := padre["Id"].(float64); ok {
-							facultadId := int(padreId)
-
-							// Agregar a la lista si no existe
-							if !facultadesMap[facultadId] {
-								facultadesMap[facultadId] = true
-								facultadesOikos = append(facultadesOikos, facultadId)
-
-								nombreFacultad := ""
-								if nombre, ok := padre["Nombre"].(string); ok {
-									nombreFacultad = nombre
-								}
-								logs.Info("Facultad padre encontrada: ID %d (%s) para laboratorio ID %d", facultadId, nombreFacultad, labId)
-							}
-						}
-					}
+			for _, relacion := range resLabDep {
+				facultadId := relacion.Padre.Id
+				if facultadId > 0 && !facultadesMap[facultadId] {
+					facultadesMap[facultadId] = true
+					facultadesOikos = append(facultadesOikos, facultadId)
+					logs.Info("Facultad padre encontrada: ID %d (%s) para laboratorio ID %d", facultadId, relacion.Padre.Nombre, labId)
 				}
 			}
 		}
 
 		if len(facultadesOikos) == 0 {
-			return requestresponse.APIResponseDTO(false, 404, nil, "No se encontraron facultades asociadas a los laboratorios del coordinador.")
+			return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "No se encontraron facultades asociadas a los laboratorios del coordinador.", Data: nil}
 		}
 
 		// Alertar si se encontraron múltiples facultades diferentes
@@ -696,36 +604,28 @@ func ConsultarEstudiantesFacultadLaboratorios(id_coordinador_lab string, limit i
 			idFacultadOikos = facultadesOikos[0]
 		}
 
-		return obtenerSemaforosConFacultad(query, "No se encontraron estudiantes activos en las facultades asociadas a los laboratorios.", idFacultadOikos)
+		return obtenerSemaforosConFacultad(ctx, query, "No se encontraron estudiantes activos en las facultades asociadas a los laboratorios.", idFacultadOikos)
 	}
 }
 
-func obtenerSemaforos(query, notFoundMsg string) requestresponse.APIResponse {
-	var res map[string]interface{}
-	var semaforos []models.Semaforo
+func obtenerSemaforos(ctx context.Context, query, notFoundMsg string) models.APIResponse {
+	var res models.APIResponseData[[]models.Semaforo]
 
 	url :=
-		beego.AppConfig.String("UrlCrudPazySalvos") + "/semaforo/" + query
+		helpers.ConfigString("UrlCrudPazySalvos") + "/semaforo/" + query
 
-	if err := request.GetJson(url, &res); err != nil {
+	if _, err := request.GetWithContext(ctx, url, &res); err != nil {
 		logs.Error("Error al consultar paz_y_salvos:", err)
-		return requestresponse.APIResponseDTO(false, 503, nil, "Error al consultar los datos del semáforo.")
+		return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "Error al consultar los datos del semáforo.", Data: nil}
 	}
 
-	data, ok := res["Data"].([]interface{})
-	if !ok || len(data) == 0 {
-		return requestresponse.APIResponseDTO(false, 404, nil, notFoundMsg)
+	if !res.Success {
+		return models.APIResponse{Success: false, Status: res.Status, Message: res.Message, Data: res.Data}
 	}
 
-	dataBytes, err := json.Marshal(data)
-	if err != nil {
-		logs.Error("Error al serializar datos:", err)
-		return requestresponse.APIResponseDTO(false, 500, nil, "Error al procesar los datos del semáforo.")
-	}
-
-	if err := json.Unmarshal(dataBytes, &semaforos); err != nil {
-		logs.Error("Error al convertir datos a estructura:", err)
-		return requestresponse.APIResponseDTO(false, 500, nil, "Error interno al interpretar los datos del semáforo.")
+	semaforos := res.Data
+	if len(semaforos) == 0 {
+		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: notFoundMsg, Data: nil}
 	}
 
 	// Consultar el total de registros (sin limit)
@@ -740,56 +640,46 @@ func obtenerSemaforos(query, notFoundMsg string) requestresponse.APIResponse {
 		queryCount = strings.Split(queryCount, "&offset=")[0]
 	}
 
-	var resCount map[string]interface{}
+	var resCount models.APIResponseData[[]models.Semaforo]
 	urlCount :=
-		beego.AppConfig.String("UrlCrudPazySalvos") + "/semaforo/" + queryCount
+		helpers.ConfigString("UrlCrudPazySalvos") + "/semaforo/" + queryCount
 
-	if err := request.GetJson(urlCount, &resCount); err == nil {
-		if dataCount, ok := resCount["Data"].([]interface{}); ok {
-			totalCount = len(dataCount)
-		}
+	if _, err := request.GetWithContext(ctx, urlCount, &resCount); err == nil && resCount.Success {
+		totalCount = len(resCount.Data)
 	}
 
 	// Reutiliza la lógica de enriquecimiento
-	tabla := consultarDataSemaforo(semaforos)
+	tabla := consultarDataSemaforo(ctx, semaforos)
 
 	// Retornar con metadatos de paginación
-	result := map[string]interface{}{
-		"Data":       tabla,
-		"TotalCount": totalCount,
-		"Limit":      len(semaforos),
+	result := models.SemaforosResponse{
+		Semaforos:  tabla,
+		TotalCount: totalCount,
+		Limit:      len(semaforos),
 	}
 
-	return requestresponse.APIResponseDTO(true, 200, result, "Consulta exitosa")
+	return models.APIResponse{Success: true, Status: http.StatusOK, Message: "Consulta exitosa", Data: result}
 }
 
 // obtenerSemaforosConFacultad es similar a obtenerSemaforos pero incluye el IdFacultadOikos en la respuesta
-func obtenerSemaforosConFacultad(query, notFoundMsg string, idFacultadOikos int) requestresponse.APIResponse {
-	var res map[string]interface{}
-	var semaforos []models.Semaforo
+func obtenerSemaforosConFacultad(ctx context.Context, query, notFoundMsg string, idFacultadOikos int) models.APIResponse {
+	var res models.APIResponseData[[]models.Semaforo]
 
 	url :=
-		beego.AppConfig.String("UrlCrudPazySalvos") + "/semaforo/" + query
+		helpers.ConfigString("UrlCrudPazySalvos") + "/semaforo/" + query
 
-	if err := request.GetJson(url, &res); err != nil {
+	if _, err := request.GetWithContext(ctx, url, &res); err != nil {
 		logs.Error("Error al consultar paz_y_salvos:", err)
-		return requestresponse.APIResponseDTO(false, 503, nil, "Error al consultar los datos del semáforo.")
+		return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "Error al consultar los datos del semáforo.", Data: nil}
 	}
 
-	data, ok := res["Data"].([]interface{})
-	if !ok || len(data) == 0 {
-		return requestresponse.APIResponseDTO(false, 404, nil, notFoundMsg)
+	if !res.Success {
+		return models.APIResponse{Success: false, Status: res.Status, Message: res.Message, Data: res.Data}
 	}
 
-	dataBytes, err := json.Marshal(data)
-	if err != nil {
-		logs.Error("Error al serializar datos:", err)
-		return requestresponse.APIResponseDTO(false, 500, nil, "Error al procesar los datos del semáforo.")
-	}
-
-	if err := json.Unmarshal(dataBytes, &semaforos); err != nil {
-		logs.Error("Error al convertir datos a estructura:", err)
-		return requestresponse.APIResponseDTO(false, 500, nil, "Error interno al interpretar los datos del semáforo.")
+	semaforos := res.Data
+	if len(semaforos) == 0 {
+		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: notFoundMsg, Data: nil}
 	}
 
 	// Consultar el total de registros (sin limit)
@@ -804,29 +694,29 @@ func obtenerSemaforosConFacultad(query, notFoundMsg string, idFacultadOikos int)
 		queryCount = strings.Split(queryCount, "&offset=")[0]
 	}
 
-	var resCount map[string]interface{}
+	var resCount models.APIResponseData[[]models.Semaforo]
 	urlCount :=
-		beego.AppConfig.String("UrlCrudPazySalvos") + "/semaforo/" + queryCount
+		helpers.ConfigString("UrlCrudPazySalvos") + "/semaforo/" + queryCount
 
-	if err := request.GetJson(urlCount, &resCount); err == nil {
-		if dataCount, ok := resCount["Data"].([]interface{}); ok {
-			totalCount = len(dataCount)
-		}
+	if _, err := request.GetWithContext(ctx, urlCount, &resCount); err == nil && resCount.Success {
+		totalCount = len(resCount.Data)
 	}
 
-	tabla := consultarDataSemaforo(semaforos)
+	tabla := consultarDataSemaforo(ctx, semaforos)
 
-	result := map[string]interface{}{
-		"Data":            tabla,
-		"TotalCount":      totalCount,
-		"Limit":           len(semaforos),
-		"IdFacultadOikos": idFacultadOikos,
+	result := models.SemaforosFacultadResponse{
+		SemaforosResponse: models.SemaforosResponse{
+			Semaforos:  tabla,
+			TotalCount: totalCount,
+			Limit:      len(semaforos),
+		},
+		IdFacultadOikos: idFacultadOikos,
 	}
 
-	return requestresponse.APIResponseDTO(true, 200, result, "Consulta exitosa")
+	return models.APIResponse{Success: true, Status: http.StatusOK, Message: "Consulta exitosa", Data: result}
 }
 
-func consultarDataSemaforo(semaforos []models.Semaforo) []models.SemaforoTable {
+func consultarDataSemaforo(ctx context.Context, semaforos []models.Semaforo) []models.SemaforoTable {
 	var result []models.SemaforoTable
 
 	for _, s := range semaforos {
@@ -834,50 +724,38 @@ func consultarDataSemaforo(semaforos []models.Semaforo) []models.SemaforoTable {
 
 		// 1. Nombre del estudiante
 		urlEst :=
-			beego.AppConfig.String("UrlcrudWSO2") +
-				beego.AppConfig.String("NscrudAcademica") +
+			helpers.ConfigString("UrlcrudWSO2") +
+				helpers.ConfigString("NscrudAcademica") +
 				"/datos_basicos_estudiante/" + fmt.Sprintf("%0.f", s.CodigoEstudiante)
-		var resEst map[string]interface{}
-		if err := request.GetJsonWSO2(urlEst, &resEst); err != nil {
+		var resEst models.DatosEstudianteResponse
+		if _, err := request.GetWithContext(ctx, urlEst, &resEst); err != nil {
 			logs.Warn("No se pudo obtener nombre del estudiante %0.f: %v", s.CodigoEstudiante, err)
-		} else {
-			if datosCollection, ok := resEst["datosEstudianteCollection"].(map[string]interface{}); ok {
-				if lista, ok := datosCollection["datosBasicosEstudiante"].([]interface{}); ok && len(lista) == 1 {
-					if estudiante, ok := lista[0].(map[string]interface{}); ok {
-						if nombre, ok := estudiante["nombre"].(string); ok {
-							nombreEstudiante = nombre
-						}
-					}
-				}
-			}
+		} else if datos := resEst.DatosEstudianteCollection.DatosBasicos; len(datos) == 1 {
+			nombreEstudiante = datos[0].Nombre
 		}
 
 		// 2. Nombre de la facultad
 		urlFac :=
-			beego.AppConfig.String("UrlcrudOikos") +
+			helpers.ConfigString("UrlcrudOikos") +
 				"dependencia/" + fmt.Sprintf("%d", s.IdFacultadOikos)
 
-		var resFac map[string]interface{}
-		if err := request.GetJson(urlFac, &resFac); err != nil {
+		var resFac models.DependenciaOikos
+		if _, err := request.GetWithContext(ctx, urlFac, &resFac); err != nil {
 			logs.Warn("No se pudo obtener nombre de la facultad %d: %v", s.IdFacultadOikos, err)
 		} else {
-			if nombre, ok := resFac["Nombre"].(string); ok {
-				nombreFacultad = nombre
-			}
+			nombreFacultad = resFac.Nombre
 		}
 
 		// // 3. Nombre del proyecto
 		urlProj :=
-			beego.AppConfig.String("UrlcrudOikos") +
+			helpers.ConfigString("UrlcrudOikos") +
 				"dependencia/" + fmt.Sprintf("%d", s.IdProyectoOikos)
 
-		var resProj map[string]interface{}
-		if err := request.GetJson(urlProj, &resProj); err != nil {
+		var resProj models.DependenciaOikos
+		if _, err := request.GetWithContext(ctx, urlProj, &resProj); err != nil {
 			logs.Warn("No se pudo obtener nombre del proyecto %d: %v", s.IdProyectoOikos, err)
 		} else {
-			if nombre, ok := resProj["Nombre"].(string); ok {
-				nombreProyecto = nombre
-			}
+			nombreProyecto = resProj.Nombre
 		}
 
 		result = append(result, models.SemaforoTable{
