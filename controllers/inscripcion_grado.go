@@ -137,6 +137,66 @@ func (c *InscripcionGradoController) ListarModalidades() {
 	c.respuesta(http.StatusOK, modalidades, "Consulta exitosa")
 }
 
+func (c *InscripcionGradoController) ListarPaisesExpedicion() {
+	tercero, err := c.GetInt("tercero_id")
+	if err != nil || tercero <= 0 {
+		c.respuesta(http.StatusBadRequest, nil, "Tercero requerido")
+		return
+	}
+	paises, err := services.ListarPaisesExpedicionGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), tercero)
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, paises, "Consulta exitosa")
+}
+
+func (c *InscripcionGradoController) ListarDepartamentosExpedicion() {
+	tercero, errTercero := c.GetInt("tercero_id")
+	pais, errPais := c.GetInt("pais_id")
+	if errTercero != nil || errPais != nil || tercero <= 0 || pais <= 0 {
+		c.respuesta(http.StatusBadRequest, nil, "Tercero y país requeridos")
+		return
+	}
+	departamentos, err := services.ListarDepartamentosExpedicionGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), tercero, pais)
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, departamentos, "Consulta exitosa")
+}
+
+func (c *InscripcionGradoController) ListarLugaresExpedicion() {
+	tercero, errTercero := c.GetInt("tercero_id")
+	pais, errPais := c.GetInt("pais_id")
+	departamento, errDepartamento := c.GetInt("departamento_id")
+	if errTercero != nil || errPais != nil || errDepartamento != nil || tercero <= 0 || pais <= 0 || departamento <= 0 {
+		c.respuesta(http.StatusBadRequest, nil, "Tercero, país y departamento requeridos")
+		return
+	}
+	lugares, err := services.ListarLugaresExpedicionGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), tercero, pais, departamento)
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, lugares, "Consulta exitosa")
+}
+
+func (c *InscripcionGradoController) ObtenerLugarExpedicion() {
+	id, errID := strconv.Atoi(c.Ctx.Input.Param(":id"))
+	tercero, errTercero := c.GetInt("tercero_id")
+	if errID != nil || errTercero != nil || id <= 0 || tercero <= 0 {
+		c.respuesta(http.StatusBadRequest, nil, "Tercero y ciudad requeridos")
+		return
+	}
+	lugar, err := services.ValidarLugarExpedicionGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), tercero, id)
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, lugar, "Consulta exitosa")
+}
+
 func (c *InscripcionGradoController) ListarSoportes() {
 	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
 	tercero, errTercero := c.GetInt("tercero_id")

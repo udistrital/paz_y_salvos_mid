@@ -28,10 +28,32 @@ type DirectorGrado struct {
 }
 
 type ModalidadGrado struct {
-	Codigo      int64  `json:"AMG_COD"`
-	Nombre      string `json:"AMG_NOMBRE"`
-	Abreviatura string `json:"AMG_ABREVIATURA"`
-	Estado      string `json:"AMG_ESTADO"`
+	Id                int     `json:"Id"`
+	Nombre            string  `json:"Nombre"`
+	CodigoAbreviacion string  `json:"CodigoAbreviacion"`
+	Activo            bool    `json:"Activo"`
+	NumeroOrden       float64 `json:"NumeroOrden"`
+}
+
+type PaisExpedicionGrado struct {
+	Id     int    `json:"Id"`
+	Nombre string `json:"Nombre"`
+}
+
+type DepartamentoExpedicionGrado struct {
+	Id         int    `json:"Id"`
+	Nombre     string `json:"Nombre"`
+	PaisId     int    `json:"PaisId"`
+	PaisNombre string `json:"PaisNombre"`
+}
+
+type LugarExpedicionGrado struct {
+	Id                 int    `json:"Id"`
+	Nombre             string `json:"Nombre"`
+	DepartamentoId     int    `json:"DepartamentoId"`
+	DepartamentoNombre string `json:"DepartamentoNombre"`
+	PaisId             int    `json:"PaisId"`
+	PaisNombre         string `json:"PaisNombre"`
 }
 
 type SolicitudGrado struct {

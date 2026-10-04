@@ -13,9 +13,10 @@ import (
 )
 
 type camposRadicacionGrado struct {
-	Director1 string
-	Director2 string
-	Modalidad int64
+	Director1         string
+	Director2         string
+	Modalidad         string
+	LugarExpedicionID int
 }
 
 func validarContenidoRadicacionGrado(raw json.RawMessage) (json.RawMessage, camposRadicacionGrado, error) {
@@ -23,17 +24,17 @@ func validarContenidoRadicacionGrado(raw json.RawMessage) (json.RawMessage, camp
 		return nil, camposRadicacionGrado{}, falloGrado(400, "Contenido del formulario inválido")
 	}
 	var formulario struct {
-		TrabajoGrado             string `json:"trabajoGrado"`
-		Director1                string `json:"director1"`
-		Director2                string `json:"director2"`
-		Modalidad                int64  `json:"modalidad"`
-		LugarExpedicionDocumento string `json:"lugarExpedicionDocumento"`
-		NumeroActaSustentacion   string `json:"numeroActaSustentacion"`
-		NumeroRegistroSNP        string `json:"numeroRegistroSnp"`
-		TrabajaActualmente       *bool  `json:"trabajaActualmente"`
-		Empresa                  string `json:"empresa"`
-		DireccionEmpresa         string `json:"direccionEmpresa"`
-		TelefonoEmpresa          string `json:"telefonoEmpresa"`
+		TrabajoGrado               string `json:"trabajoGrado"`
+		Director1                  string `json:"director1"`
+		Director2                  string `json:"director2"`
+		Modalidad                  string `json:"modalidad"`
+		LugarExpedicionDocumentoId int    `json:"lugarExpedicionDocumentoId"`
+		NumeroActaSustentacion     string `json:"numeroActaSustentacion"`
+		NumeroRegistroSNP          string `json:"numeroRegistroSnp"`
+		TrabajaActualmente         *bool  `json:"trabajaActualmente"`
+		Empresa                    string `json:"empresa"`
+		DireccionEmpresa           string `json:"direccionEmpresa"`
+		TelefonoEmpresa            string `json:"telefonoEmpresa"`
 	}
 	var contenido map[string]interface{}
 	if json.Unmarshal(raw, &formulario) != nil || json.Unmarshal(raw, &contenido) != nil {
@@ -42,11 +43,11 @@ func validarContenidoRadicacionGrado(raw json.RawMessage) (json.RawMessage, camp
 	formulario.TrabajoGrado = strings.TrimSpace(formulario.TrabajoGrado)
 	formulario.Director1 = strings.TrimSpace(formulario.Director1)
 	formulario.Director2 = strings.TrimSpace(formulario.Director2)
-	formulario.LugarExpedicionDocumento = strings.TrimSpace(formulario.LugarExpedicionDocumento)
+	formulario.Modalidad = strings.TrimSpace(formulario.Modalidad)
 	formulario.NumeroActaSustentacion = strings.TrimSpace(formulario.NumeroActaSustentacion)
 	formulario.NumeroRegistroSNP = strings.ToUpper(strings.TrimSpace(formulario.NumeroRegistroSNP))
-	if formulario.TrabajoGrado == "" || !cedulaGrado.MatchString(formulario.Director1) || formulario.Modalidad <= 0 ||
-		formulario.LugarExpedicionDocumento == "" || formulario.NumeroActaSustentacion == "" ||
+	if formulario.TrabajoGrado == "" || !cedulaGrado.MatchString(formulario.Director1) || formulario.Modalidad == "" ||
+		formulario.LugarExpedicionDocumentoId <= 0 || formulario.NumeroActaSustentacion == "" ||
 		!registroSNPGrado.MatchString(formulario.NumeroRegistroSNP) || formulario.TrabajaActualmente == nil {
 		return nil, camposRadicacionGrado{}, falloGrado(400, "Completa todos los campos obligatorios antes de radicar")
 	}
@@ -61,11 +62,16 @@ func validarContenidoRadicacionGrado(raw json.RawMessage) (json.RawMessage, camp
 	}
 	for clave, valor := range map[string]interface{}{
 		"trabajoGrado": formulario.TrabajoGrado, "director1": formulario.Director1, "modalidad": formulario.Modalidad,
-		"lugarExpedicionDocumento": formulario.LugarExpedicionDocumento, "numeroActaSustentacion": formulario.NumeroActaSustentacion,
+		"lugarExpedicionDocumentoId": formulario.LugarExpedicionDocumentoId, "numeroActaSustentacion": formulario.NumeroActaSustentacion,
 		"numeroRegistroSnp": formulario.NumeroRegistroSNP, "trabajaActualmente": *formulario.TrabajaActualmente,
 	} {
 		contenido[clave] = valor
 	}
+	delete(contenido, "lugarExpedicionDocumento")
+	delete(contenido, "departamentoExpedicionDocumentoId")
+	delete(contenido, "departamentoExpedicionDocumento")
+	delete(contenido, "paisExpedicionDocumentoId")
+	delete(contenido, "paisExpedicionDocumento")
 	if formulario.Director2 == "" {
 		delete(contenido, "director2")
 	} else {
@@ -82,7 +88,21 @@ func validarContenidoRadicacionGrado(raw json.RawMessage) (json.RawMessage, camp
 	if err != nil {
 		return nil, camposRadicacionGrado{}, falloGrado(400, "Contenido del formulario inválido")
 	}
-	return normalizado, camposRadicacionGrado{Director1: formulario.Director1, Director2: formulario.Director2, Modalidad: formulario.Modalidad}, nil
+	return normalizado, camposRadicacionGrado{Director1: formulario.Director1, Director2: formulario.Director2, Modalidad: formulario.Modalidad, LugarExpedicionID: formulario.LugarExpedicionDocumentoId}, nil
+}
+
+func agregarLugarExpedicionGrado(raw json.RawMessage, lugar models.LugarExpedicionGrado) (json.RawMessage, error) {
+	var contenido map[string]interface{}
+	if json.Unmarshal(raw, &contenido) != nil {
+		return nil, falloGrado(http.StatusBadRequest, "Contenido del formulario inválido")
+	}
+	contenido["lugarExpedicionDocumentoId"] = lugar.Id
+	contenido["lugarExpedicionDocumento"] = lugar.Nombre
+	normalizado, err := json.Marshal(contenido)
+	if err != nil {
+		return nil, falloGrado(http.StatusBadRequest, "Contenido del formulario inválido")
+	}
+	return normalizado, nil
 }
 
 func RadicarGrado(ctx context.Context, auth string, id int, entrada models.RadicarGrado) (*models.BorradorGrado, error) {
@@ -123,6 +143,14 @@ func RadicarGrado(ctx context.Context, auth string, id int, entrada models.Radic
 		}
 	}
 	if err := ValidarModalidadGrado(ctx, auth, entrada.TerceroId, campos.Modalidad); err != nil {
+		return nil, err
+	}
+	lugar, err := ValidarLugarExpedicionGrado(ctx, auth, entrada.TerceroId, campos.LugarExpedicionID)
+	if err != nil {
+		return nil, err
+	}
+	contenido, err = agregarLugarExpedicionGrado(contenido, *lugar)
+	if err != nil {
 		return nil, err
 	}
 	tipos := make([]int, 0, len(tiposSoporteGrado))
