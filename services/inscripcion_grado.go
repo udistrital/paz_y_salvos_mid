@@ -132,6 +132,33 @@ func resolverEstadoRadicada(ctx context.Context) (int, error) {
 	return resolverParametroGrado(ctx, "EST_SOL_GRADO", "SG_RADICADA")
 }
 
+func estadosConsultaGrado(ctx context.Context) (map[string]int, error) {
+	estados := make(map[string]int, 4)
+	for _, codigo := range []string{"SG_BORRADOR", "SG_RADICADA", "SG_OBSERVADA", "SG_DOC_APROBADA"} {
+		id, err := resolverParametroGrado(ctx, "EST_SOL_GRADO", codigo)
+		if err != nil {
+			return nil, err
+		}
+		estados[codigo] = id
+	}
+	return estados, nil
+}
+
+func idsEstadosConsultaGrado(estados map[string]int) string {
+	return fmt.Sprintf("%d,%d,%d,%d", estados["SG_BORRADOR"], estados["SG_RADICADA"], estados["SG_OBSERVADA"], estados["SG_DOC_APROBADA"])
+}
+
+func completarEstadoConsultaGrado(borrador *models.BorradorGrado, estados map[string]int) error {
+	for codigo, id := range estados {
+		if borrador.Historial.EstadoSolicitudId == id {
+			borrador.Estado = codigo
+			borrador.Comentario = borrador.Historial.Justificacion
+			return nil
+		}
+	}
+	return falloGrado(http.StatusServiceUnavailable, "Estado de solicitud no reconocido")
+}
+
 func resolverParametroGrado(ctx context.Context, tipoCodigo, codigo string) (int, error) {
 	paramURL, err := baseGrado("UrlcrudParametros")
 	if err != nil {
@@ -522,11 +549,7 @@ func ObtenerBorradorGrado(ctx context.Context, auth string, terceroID, periodoID
 	}
 	// La lectura se limita al titular en CRUD. Una convocatoria cerrada no oculta
 	// una solicitud que ya pertenece al estudiante, incluso después de radicarla.
-	estadoBorrador, err := resolverEstadoBorrador(user.Ctx)
-	if err != nil {
-		return nil, err
-	}
-	estadoRadicada, err := resolverEstadoRadicada(user.Ctx)
+	estados, err := estadosConsultaGrado(user.Ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -535,7 +558,7 @@ func ObtenerBorradorGrado(ctx context.Context, auth string, terceroID, periodoID
 		return nil, err
 	}
 	q := url.Values{"tercero_id": {strconv.Itoa(user.TerceroID)}, "periodo_id": {strconv.Itoa(periodoID)}, "programa_id": {strconv.Itoa(programaID)},
-		"estado_borrador_id": {strconv.Itoa(estadoBorrador)}, "estado_radicada_id": {strconv.Itoa(estadoRadicada)}}
+		"estados": {idsEstadosConsultaGrado(estados)}}
 	var resp models.APIResponseData[models.BorradorGrado]
 	status, err := request.GetWithContext(user.Ctx, base+"solicitud-grado/borrador?"+q.Encode(), &resp)
 	if err != nil {
@@ -557,6 +580,61 @@ func ObtenerBorradorGrado(ctx context.Context, auth string, terceroID, periodoID
 	if resp.Data.Solicitud.CodigoEstudiante != codigo {
 		return nil, falloGrado(409, "La solicitud tiene un código estudiantil de otro programa; requiere corrección")
 	}
+	if err := completarEstadoConsultaGrado(&resp.Data, estados); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+func SubsanarGrado(ctx context.Context, auth string, id int, entrada models.SubsanarGrado) (*models.BorradorGrado, error) {
+	if id <= 0 || entrada.TerceroId <= 0 || entrada.FormularioId <= 0 {
+		return nil, falloGrado(http.StatusBadRequest, "Solicitud y versión requeridas")
+	}
+	user, err := resolverEstudiante(ctx, auth, entrada.TerceroId)
+	if err != nil {
+		return nil, err
+	}
+	estados, err := estadosConsultaGrado(user.Ctx)
+	if err != nil {
+		return nil, err
+	}
+	base, err := baseGrado("UrlCrudPazySalvos")
+	if err != nil {
+		return nil, err
+	}
+	q := url.Values{"tercero_id": {strconv.Itoa(user.TerceroID)}, "estados": {idsEstadosConsultaGrado(estados)}}
+	var consulta models.APIResponseData[models.BorradorGrado]
+	status, err := request.GetWithContext(user.Ctx, base+"solicitud-grado/borrador/"+strconv.Itoa(id)+"?"+q.Encode(), &consulta)
+	if err != nil || status != http.StatusOK || !consulta.Success {
+		if status == http.StatusNotFound {
+			return nil, falloGrado(http.StatusNotFound, "Solicitud no encontrada")
+		}
+		return nil, falloGrado(http.StatusConflict, "La solicitud cambió de estado o versión")
+	}
+	if consulta.Data.Solicitud.TerceroId != user.TerceroID || consulta.Data.Formulario.Id != entrada.FormularioId ||
+		consulta.Data.Historial.EstadoSolicitudId != estados["SG_OBSERVADA"] {
+		return nil, falloGrado(http.StatusConflict, "La solicitud cambió de estado o versión")
+	}
+	if err := validarVentanaSoporte(user, &consulta.Data); err != nil {
+		return nil, err
+	}
+	estadoSoporte, err := resolverParametroGrado(user.Ctx, "EST_SOP_GRADO", "SD_PEND_REV")
+	if err != nil {
+		return nil, err
+	}
+	body := map[string]int{"FormularioId": entrada.FormularioId, "EstadoObservadaId": estados["SG_OBSERVADA"],
+		"EstadoBorradorId": estados["SG_BORRADOR"], "EstadoSoportePendienteId": estadoSoporte}
+	var resp models.APIResponseData[models.BorradorGrado]
+	status, err = request.PostWithContext(user.Ctx, base+"solicitud-grado/borrador/"+strconv.Itoa(id)+"/subsanar?tercero_id="+strconv.Itoa(user.TerceroID), body, &resp)
+	if err != nil || !resp.Success || status >= http.StatusBadRequest {
+		if status == http.StatusConflict || status == http.StatusNotFound {
+			return nil, falloGrado(status, "La solicitud cambió de estado o versión")
+		}
+		return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo iniciar la subsanación")
+	}
+	if err := completarEstadoConsultaGrado(&resp.Data, estados); err != nil {
+		return nil, err
+	}
 	return &resp.Data, nil
 }
 
@@ -576,10 +654,10 @@ func GuardarBorradorGrado(ctx context.Context, auth string, id, terceroID int, c
 	if err != nil {
 		return nil, err
 	}
-	q := url.Values{"tercero_id": {strconv.Itoa(user.TerceroID)}, "estado_borrador_id": {strconv.Itoa(estado)}}
-	path := base + "solicitud-grado/borrador/" + strconv.Itoa(id) + "?" + q.Encode()
+	consulta := url.Values{"tercero_id": {strconv.Itoa(user.TerceroID)}, "estados": {strconv.Itoa(estado)}}
+	pathConsulta := base + "solicitud-grado/borrador/" + strconv.Itoa(id) + "?" + consulta.Encode()
 	var resp models.APIResponseData[models.BorradorGrado]
-	status, err := request.GetWithContext(user.Ctx, path, &resp)
+	status, err := request.GetWithContext(user.Ctx, pathConsulta, &resp)
 	if err != nil {
 		if status == 404 {
 			return nil, falloGrado(404, "Borrador no encontrado")
@@ -613,7 +691,9 @@ func GuardarBorradorGrado(ctx context.Context, auth string, id, terceroID int, c
 	if err := validarVentana(eventoGrado{}, apr, false); err != nil {
 		return nil, err
 	}
-	status, err = request.PutWithContext(user.Ctx, path, map[string]interface{}{"Contenido": contenido}, &resp)
+	actualizacion := url.Values{"tercero_id": {strconv.Itoa(user.TerceroID)}, "estado_borrador_id": {strconv.Itoa(estado)}}
+	pathActualizacion := base + "solicitud-grado/borrador/" + strconv.Itoa(id) + "?" + actualizacion.Encode()
+	status, err = request.PutWithContext(user.Ctx, pathActualizacion, map[string]interface{}{"Contenido": contenido}, &resp)
 	if err != nil {
 		if status == 409 {
 			return nil, falloGrado(409, "La versión ya no es editable")

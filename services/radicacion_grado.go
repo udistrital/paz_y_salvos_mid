@@ -131,7 +131,7 @@ func RadicarGrado(ctx context.Context, auth string, id int, entrada models.Radic
 	if inscripcion.EventoId != borrador.Solicitud.CalendarioEventoInscripcionId || aprobacion.EventoId != borrador.Solicitud.CalendarioEventoAprobacionId {
 		return nil, falloGrado(409, "La configuración de fechas cambió; la solicitud requiere revisión")
 	}
-	if err := validarVentana(inscripcion, aprobacion, true); err != nil {
+	if err := validarVentana(inscripcion, aprobacion, borrador.Formulario.Version == 1); err != nil {
 		return nil, err
 	}
 	if err := ValidarDirectorGrado(ctx, auth, entrada.TerceroId, campos.Director1); err != nil {
@@ -160,7 +160,6 @@ func RadicarGrado(ctx context.Context, auth string, id int, entrada models.Radic
 		if err != nil {
 			return nil, err
 		}
-		tipos = append(tipos, tipo)
 		var soporte *models.SoporteGrado
 		for i := range borrador.Soportes {
 			if borrador.Soportes[i].TipoDocumentoId == tipo {
@@ -170,9 +169,16 @@ func RadicarGrado(ctx context.Context, auth string, id int, entrada models.Radic
 				soporte = &borrador.Soportes[i]
 			}
 		}
-		if soporte == nil || documentos[soporte.DocumentoId] {
-			return nil, falloGrado(400, "Carga los cuatro soportes obligatorios antes de radicar")
+		if soporte == nil {
+			if definicion.Obligatorio {
+				return nil, falloGrado(400, "Carga todos los soportes obligatorios antes de radicar")
+			}
+			continue
 		}
+		if documentos[soporte.DocumentoId] {
+			return nil, falloGrado(400, "Los soportes deben corresponder a documentos distintos")
+		}
+		tipos = append(tipos, tipo)
 		documentos[soporte.DocumentoId] = true
 		tipoDocumento, err := resolverTipoDocumentoGrado(user.Ctx, definicion.TipoDocumento)
 		if err != nil {
@@ -186,8 +192,8 @@ func RadicarGrado(ctx context.Context, auth string, id int, entrada models.Radic
 			return nil, err
 		}
 	}
-	if len(borrador.Soportes) != len(tiposSoporteGrado) {
-		return nil, falloGrado(400, "Carga los cuatro soportes obligatorios antes de radicar")
+	if len(borrador.Soportes) != len(tipos) {
+		return nil, falloGrado(400, "Los soportes del borrador no son válidos")
 	}
 	estadoRadicada, err := resolverParametroGrado(user.Ctx, "EST_SOL_GRADO", "SG_RADICADA")
 	if err != nil {
@@ -199,6 +205,12 @@ func RadicarGrado(ctx context.Context, auth string, id int, entrada models.Radic
 	}
 	base, err := baseGrado("UrlCrudPazySalvos")
 	if err != nil {
+		return nil, err
+	}
+	if _, err := RegistrarLugarExpedicionIdentificacionGrado(ctx, auth, models.RegistrarLugarExpedicionGrado{
+		TerceroId: entrada.TerceroId,
+		LugarId:   campos.LugarExpedicionID,
+	}); err != nil {
 		return nil, err
 	}
 	q := url.Values{"tercero_id": {strconv.Itoa(user.TerceroID)}}
@@ -216,8 +228,10 @@ func RadicarGrado(ctx context.Context, auth string, id int, entrada models.Radic
 		return nil, falloGrado(503, "No se pudo confirmar la radicación; consulta el estado antes de reintentar")
 	}
 	if !resp.Success || resp.Status != 200 || resp.Data.Solicitud.Id != id || resp.Data.Solicitud.TerceroId != user.TerceroID ||
-		resp.Data.Formulario.Id != entrada.FormularioId || resp.Data.Formulario.FechaRadicacion == nil || len(resp.Data.Soportes) != 4 {
+		resp.Data.Formulario.Id != entrada.FormularioId || resp.Data.Formulario.FechaRadicacion == nil || len(resp.Data.Soportes) != len(tipos) {
 		return nil, falloGrado(503, "La respuesta de radicación no es verificable; consulta el estado antes de reintentar")
 	}
+	resp.Data.Estado = "SG_RADICADA"
+	resp.Data.Comentario = resp.Data.Historial.Justificacion
 	return &resp.Data, nil
 }

@@ -7,4 +7,5 @@ type DependenciaOikos struct {
 
 type DependenciaPadreOikos struct {
 	Padre DependenciaOikos `json:"Padre"`
+	Hija  DependenciaOikos `json:"Hija"`
 }

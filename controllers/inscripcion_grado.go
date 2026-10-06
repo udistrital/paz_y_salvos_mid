@@ -109,6 +109,24 @@ func (c *InscripcionGradoController) Radicar() {
 	c.respuesta(http.StatusOK, res, "Inscripción radicada")
 }
 
+func (c *InscripcionGradoController) Subsanar() {
+	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
+	if err != nil || id <= 0 {
+		c.respuesta(http.StatusBadRequest, nil, "Solicitud inválida")
+		return
+	}
+	var entrada models.SubsanarGrado
+	if !c.jsonEntrada(&entrada) {
+		return
+	}
+	res, err := services.SubsanarGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), id, entrada)
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusCreated, res, "Subsanación iniciada")
+}
+
 func (c *InscripcionGradoController) ListarDirectores() {
 	tercero, err := c.GetInt("tercero_id")
 	if err != nil || tercero <= 0 {
@@ -197,6 +215,20 @@ func (c *InscripcionGradoController) ObtenerLugarExpedicion() {
 	c.respuesta(http.StatusOK, lugar, "Consulta exitosa")
 }
 
+func (c *InscripcionGradoController) ObtenerLugarExpedicionIdentificacion() {
+	tercero, err := c.GetInt("tercero_id")
+	if err != nil || tercero <= 0 {
+		c.respuesta(http.StatusBadRequest, nil, "Tercero requerido")
+		return
+	}
+	resultado, err := services.ObtenerLugarExpedicionIdentificacionGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), tercero)
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, resultado, "Consulta exitosa")
+}
+
 func (c *InscripcionGradoController) ListarSoportes() {
 	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
 	tercero, errTercero := c.GetInt("tercero_id")
@@ -234,6 +266,25 @@ func (c *InscripcionGradoController) CargarSoporte() {
 	c.respuesta(200, res, "PDF asociado al borrador; documento provisional")
 }
 
+func (c *InscripcionGradoController) EliminarSoporte() {
+	id, errID := strconv.Atoi(c.Ctx.Input.Param(":id"))
+	tercero, errTercero := c.GetInt("tercero_id")
+	formulario, errFormulario := c.GetInt("formulario_id")
+	soporte, errSoporte := c.GetInt("soporte_actual_id")
+	if errID != nil || errTercero != nil || errFormulario != nil || errSoporte != nil ||
+		id <= 0 || tercero <= 0 || formulario <= 0 || soporte <= 0 {
+		c.respuesta(http.StatusBadRequest, nil, "Solicitud, versión y soporte requeridos")
+		return
+	}
+	res, err := services.EliminarSoporteGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), id,
+		tercero, formulario, soporte, c.Ctx.Input.Param(":tipo"))
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, res, "PDF retirado del borrador; historial conservado")
+}
+
 func (c *InscripcionGradoController) DescargarSoporte() {
 	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
 	tercero, errTercero := c.GetInt("tercero_id")
@@ -247,4 +298,77 @@ func (c *InscripcionGradoController) DescargarSoporte() {
 		return
 	}
 	c.respuesta(200, res, "Consulta del PDF")
+}
+
+func (c *InscripcionGradoController) ListarRevisionDocumental() {
+	limit, errLimit := c.GetInt("limit", 20)
+	offset, errOffset := c.GetInt("offset", 0)
+	periodo, errPeriodo := c.GetInt("periodo_id", 0)
+	programa, errPrograma := c.GetInt("programa_id", 0)
+	if errLimit != nil || errOffset != nil || errPeriodo != nil || errPrograma != nil {
+		c.respuesta(http.StatusBadRequest, nil, "Filtros de consulta inválidos")
+		return
+	}
+	res, err := services.ListarRevisionDocumentalGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), limit, offset,
+		periodo, programa, c.GetString("estado"), c.GetString("texto"))
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, res, "Solicitudes para revisión documental")
+}
+
+func (c *InscripcionGradoController) FiltrosRevisionDocumental() {
+	res, err := services.FiltrosRevisionDocumentalGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"))
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, res, "Filtros de revisión documental")
+}
+
+func (c *InscripcionGradoController) ConsultarRevisionDocumental() {
+	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
+	if err != nil || id <= 0 {
+		c.respuesta(http.StatusBadRequest, nil, "Solicitud inválida")
+		return
+	}
+	res, err := services.ConsultarRevisionDocumentalGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), id)
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, res, "Expediente para revisión documental")
+}
+
+func (c *InscripcionGradoController) RevisarDocumentacion() {
+	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
+	if err != nil || id <= 0 {
+		c.respuesta(http.StatusBadRequest, nil, "Solicitud inválida")
+		return
+	}
+	var entrada models.RevisarDocumentacionGrado
+	if !c.jsonEntrada(&entrada) {
+		return
+	}
+	res, err := services.RevisarDocumentacionSecretariaGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), id, entrada)
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, res, "Revisión documental registrada")
+}
+
+func (c *InscripcionGradoController) DescargarSoporteRevision() {
+	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
+	if err != nil || id <= 0 {
+		c.respuesta(http.StatusBadRequest, nil, "Solicitud inválida")
+		return
+	}
+	res, err := services.DescargarSoporteRevisionGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), id, c.Ctx.Input.Param(":tipo"))
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, res, "Consulta del PDF para revisión")
 }

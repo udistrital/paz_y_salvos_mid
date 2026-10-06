@@ -357,13 +357,20 @@ func ValidarLugarExpedicionGrado(ctx context.Context, auth string, terceroID, lu
 	if err != nil {
 		return nil, err
 	}
-	catalogo, err := nuevoCatalogoUbicacionGrado(user.Ctx)
+	return resolverLugarExpedicionGrado(user.Ctx, lugarID)
+}
+
+func resolverLugarExpedicionGrado(ctx context.Context, lugarID int) (*models.LugarExpedicionGrado, error) {
+	if lugarID <= 0 {
+		return nil, falloGrado(http.StatusBadRequest, "Lugar de expedición inválido")
+	}
+	catalogo, err := nuevoCatalogoUbicacionGrado(ctx)
 	if err != nil {
 		return nil, err
 	}
 	qCiudad := url.Values{"query": {"LugarHijoId.Id:" + strconv.Itoa(lugarID) + ",LugarPadreId.TipoLugarId.Id:" + strconv.Itoa(catalogo.tipoID["departamento"]) + ",LugarHijoId.TipoLugarId.Id:" + strconv.Itoa(catalogo.tipoID["ciudad"]) + ",Activo:true,LugarPadreId.Activo:true,LugarHijoId.Activo:true"}, "limit": {"-1"}}
 	var ciudades []relacionLugarGrado
-	if err := catalogo.consultar(user.Ctx, "relacion_lugares?"+qCiudad.Encode(), &ciudades); err != nil {
+	if err := catalogo.consultar(ctx, "relacion_lugares?"+qCiudad.Encode(), &ciudades); err != nil {
 		return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo revalidar la ciudad de expedición")
 	}
 	if len(ciudades) == 0 {
@@ -379,7 +386,7 @@ func ValidarLugarExpedicionGrado(ctx context.Context, auth string, terceroID, lu
 	}
 	qDepartamento := url.Values{"query": {"LugarHijoId.Id:" + strconv.Itoa(departamento.Id) + ",LugarPadreId.TipoLugarId.Id:" + strconv.Itoa(catalogo.tipoID["pais"]) + ",LugarHijoId.TipoLugarId.Id:" + strconv.Itoa(catalogo.tipoID["departamento"]) + ",Activo:true,LugarPadreId.Activo:true,LugarHijoId.Activo:true"}, "limit": {"-1"}}
 	var departamentos []relacionLugarGrado
-	if err := catalogo.consultar(user.Ctx, "relacion_lugares?"+qDepartamento.Encode(), &departamentos); err != nil {
+	if err := catalogo.consultar(ctx, "relacion_lugares?"+qDepartamento.Encode(), &departamentos); err != nil {
 		return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo revalidar el departamento de expedición")
 	}
 	if len(departamentos) == 0 || departamentos[0].LugarHijoId.Id != departamento.Id {
