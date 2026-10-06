@@ -21,11 +21,12 @@ const MaxPDFGrado = 5 * 1024 * 1024
 var tiposSoporteGrado = []struct {
 	Codigo        string
 	TipoDocumento string
+	Obligatorio   bool
 }{
-	{Codigo: "TSG_ACTA_SUST", TipoDocumento: "ACT"},
+	{Codigo: "TSG_ACTA_SUST", TipoDocumento: "ACT", Obligatorio: true},
 	{Codigo: "TSG_RESULTADO_SABER", TipoDocumento: "SEE"},
-	{Codigo: "TSG_PAGO_DERECHOS", TipoDocumento: "CPDP"},
-	{Codigo: "TSG_TITULO_PREVIO", TipoDocumento: "TAP"},
+	{Codigo: "TSG_PAGO_DERECHOS", TipoDocumento: "CPDP", Obligatorio: true},
+	{Codigo: "TSG_TITULO_PREVIO", TipoDocumento: "TAP", Obligatorio: true},
 }
 
 // El tipo de soporte PSGA no es el tipo_documento de Documento CRUD/Nuxeo.
@@ -72,13 +73,13 @@ func borradorParaSoportes(ctx context.Context, auth string, id, terceroID int, p
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	q := url.Values{"tercero_id": {strconv.Itoa(user.TerceroID)}, "estado_borrador_id": {strconv.Itoa(estado)}}
+	q := url.Values{"tercero_id": {strconv.Itoa(user.TerceroID)}, "estados": {strconv.Itoa(estado)}}
 	if permitirRadicada {
-		estadoRadicada, err := resolverEstadoRadicada(user.Ctx)
+		estados, err := estadosConsultaGrado(user.Ctx)
 		if err != nil {
 			return nil, nil, 0, err
 		}
-		q.Set("estado_radicada_id", strconv.Itoa(estadoRadicada))
+		q.Set("estados", idsEstadosConsultaGrado(estados))
 	}
 	var resp models.APIResponseData[models.BorradorGrado]
 	status, err := request.GetWithContext(user.Ctx, base+"solicitud-grado/borrador/"+strconv.Itoa(id)+"?"+q.Encode(), &resp)
@@ -343,4 +344,73 @@ func CargarSoporteGrado(ctx context.Context, auth string, id int, codigo string,
 		}
 	}
 	return nil, falloGrado(503, "No se confirmó el soporte en el borrador")
+}
+
+func EliminarSoporteGrado(ctx context.Context, auth string, id, terceroID, formularioID, soporteActualID int, codigo string) (*models.SoporteEliminadoGrado, error) {
+	if _, err := codigoDocumentoGrado(codigo); err != nil {
+		return nil, err
+	}
+	if formularioID <= 0 || soporteActualID <= 0 {
+		return nil, falloGrado(http.StatusBadRequest, "Versión y soporte requeridos")
+	}
+	user, b, estado, err := borradorParaSoportes(ctx, auth, id, terceroID, false)
+	if err != nil {
+		return nil, err
+	}
+	if b.Formulario.Id != formularioID {
+		return nil, falloGrado(http.StatusConflict, "La versión del borrador cambió; recarga sus soportes")
+	}
+	if err := validarVentanaSoporte(user, b); err != nil {
+		return nil, err
+	}
+	tipo, err := resolverParametroGrado(user.Ctx, "TIP_SOP_GRADO", codigo)
+	if err != nil {
+		return nil, err
+	}
+	actual := 0
+	for _, soporte := range b.Soportes {
+		if soporte.TipoDocumentoId == tipo {
+			if actual != 0 {
+				return nil, falloGrado(http.StatusConflict, "Hay asociaciones de soporte inconsistentes")
+			}
+			actual = soporte.Id
+		}
+	}
+	if actual != soporteActualID {
+		return nil, falloGrado(http.StatusConflict, "El soporte cambió; recarga antes de eliminarlo")
+	}
+	// Se revalida justo antes de persistir para reducir la ventana entre el
+	// control de calendario y el bloqueo transaccional del CRUD.
+	if err := validarVentanaSoporte(user, b); err != nil {
+		return nil, err
+	}
+	base, err := baseGrado("UrlCrudPazySalvos")
+	if err != nil {
+		return nil, err
+	}
+	q := url.Values{
+		"tercero_id":         {strconv.Itoa(user.TerceroID)},
+		"estado_borrador_id": {strconv.Itoa(estado)},
+		"formulario_id":      {strconv.Itoa(formularioID)},
+		"soporte_actual_id":  {strconv.Itoa(soporteActualID)},
+	}
+	var resp models.APIResponseData[models.BorradorGrado]
+	status, err := request.DeleteWithContext(user.Ctx,
+		fmt.Sprintf("%ssolicitud-grado/borrador/%d/soportes/%d?%s", base, id, tipo, q.Encode()), &resp)
+	if err != nil {
+		if status == http.StatusConflict {
+			return nil, falloGrado(http.StatusConflict, "El borrador o soporte cambió durante la eliminación. Recarga antes de reintentar")
+		}
+		return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo confirmar la eliminación del soporte. Recarga los soportes")
+	}
+	if !resp.Success || resp.Status != http.StatusOK || resp.Data.Solicitud.Id != id ||
+		resp.Data.Solicitud.TerceroId != user.TerceroID || resp.Data.Formulario.Id != formularioID {
+		return nil, falloGrado(http.StatusServiceUnavailable, "Eliminación de soporte no verificable")
+	}
+	for _, soporte := range resp.Data.Soportes {
+		if soporte.Id == soporteActualID || soporte.TipoDocumentoId == tipo {
+			return nil, falloGrado(http.StatusServiceUnavailable, "No se confirmó la eliminación del soporte")
+		}
+	}
+	return &models.SoporteEliminadoGrado{Id: soporteActualID, FormularioId: formularioID, TipoSoporte: codigo}, nil
 }

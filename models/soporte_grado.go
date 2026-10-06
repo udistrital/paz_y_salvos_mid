@@ -26,6 +26,12 @@ type SoporteBorradorGrado struct {
 	Nombre       string `json:"Nombre"`
 }
 
+type SoporteEliminadoGrado struct {
+	Id           int    `json:"Id"`
+	FormularioId int    `json:"FormularioId"`
+	TipoSoporte  string `json:"TipoSoporte"`
+}
+
 type ArchivoSoporteGrado struct {
 	Nombre   string `json:"Nombre"`
 	MimeType string `json:"MimeType"`
