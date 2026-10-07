@@ -44,6 +44,80 @@ func (c *InscripcionGradoController) jsonEntrada(destino interface{}) bool {
 	return true
 }
 
+func (c *InscripcionGradoController) ConsultarPazSalvos() {
+	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
+	if err != nil || id <= 0 {
+		c.respuesta(http.StatusBadRequest, nil, "Solicitud inválida")
+		return
+	}
+	resultado, err := services.ConsultarPazSalvosGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), id, c.GetString("perfil"))
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, resultado, "Paz y Salvos consultados")
+}
+
+func (c *InscripcionGradoController) ListarPazSalvos() {
+	limit, errLimit := c.GetInt("limit", 20)
+	offset, errOffset := c.GetInt("offset", 0)
+	periodo, errPeriodo := c.GetInt("periodo_id", 0)
+	programa, errPrograma := c.GetInt("programa_id", 0)
+	facultad, errFacultad := c.GetInt("facultad_id", 0)
+	if errLimit != nil || errOffset != nil || errPeriodo != nil || errPrograma != nil || errFacultad != nil {
+		c.respuesta(http.StatusBadRequest, nil, "Filtros de bandeja inválidos")
+		return
+	}
+	resultado, err := services.ListarPazSalvosGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), c.GetString("tipo"), c.GetString("perfil"), limit, offset, periodo, programa, facultad, c.GetString("codigo"))
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, resultado, "Bandeja de Paz y Salvos consultada")
+}
+
+func (c *InscripcionGradoController) FiltrosPazSalvos() {
+	resultado, err := services.FiltrosPazSalvosGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), c.GetString("tipo"), c.GetString("perfil"))
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, resultado, "Filtros de Paz y Salvos consultados")
+}
+
+func (c *InscripcionGradoController) DecidirPazSalvo() {
+	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
+	if err != nil || id <= 0 {
+		c.respuesta(http.StatusBadRequest, nil, "Solicitud inválida")
+		return
+	}
+	var entrada models.DecidirPazSalvoGrado
+	if !c.jsonEntrada(&entrada) {
+		return
+	}
+	resultado, err := services.DecidirPazSalvoGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), id, c.Ctx.Input.Param(":tipo"), entrada)
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, resultado, "Decisión de Paz y Salvo registrada")
+}
+
+func (c *InscripcionGradoController) DescargarSoportePazSalvo() {
+	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
+	if err != nil || id <= 0 {
+		c.respuesta(http.StatusBadRequest, nil, "Solicitud inválida")
+		return
+	}
+	resultado, err := services.DescargarSoportePazSalvoGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), id,
+		c.GetString("tipo_check"), c.Ctx.Input.Param(":tipo"), c.GetString("perfil"))
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, resultado, "Consulta del PDF")
+}
+
 func (c *InscripcionGradoController) CrearBorrador() {
 	var entrada models.CrearBorradorGrado
 	if !c.jsonEntrada(&entrada) {

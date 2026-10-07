@@ -45,6 +45,7 @@ type programaGrado struct {
 }
 type nivelGrado struct {
 	Id                    int         `json:"Id"`
+	CodigoAbreviacion     string      `json:"CodigoAbreviacion"`
 	NivelFormacionPadreId *nivelGrado `json:"NivelFormacionPadreId"`
 }
 type calendarioGrado struct {
@@ -224,12 +225,31 @@ func fechaGradoServidor(s string) (time.Time, error) {
 	return time.Time{}, errors.New("fecha inválida")
 }
 
-func vigenteGrado(desde, hasta string, ahora time.Time) bool {
-	inicio, err := fechaGradoServidor(desde)
+func fechaEventoGrado(s string) (time.Time, error) {
+	if s == "" || strings.HasPrefix(s, "0001-") {
+		return time.Time{}, errors.New("fecha y hora de evento ausentes")
+	}
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t, nil
+	}
+	bogota, err := time.LoadLocation("America/Bogota")
+	if err != nil {
+		return time.Time{}, err
+	}
+	for _, formato := range []string{"2006-01-02T15:04:05.999999999", "2006-01-02 15:04:05.999999999"} {
+		if t, err := time.ParseInLocation(formato, s, bogota); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, errors.New("fecha y hora de evento inválidas")
+}
+
+func vigenteEventoGrado(desde, hasta string, ahora time.Time) bool {
+	inicio, err := fechaEventoGrado(desde)
 	if err != nil {
 		return false
 	}
-	fin, err := fechaGradoServidor(hasta)
+	fin, err := fechaEventoGrado(hasta)
 	return err == nil && !fin.Before(inicio) && !ahora.Before(inicio) && !ahora.After(fin)
 }
 
@@ -402,22 +422,44 @@ func resolverCodigoPrograma(ctx context.Context, terceroID, dependenciaOikosID i
 	return correspondiente, nil
 }
 
-func eventosGrado(ctx context.Context, programa *programaGrado, periodoID int) (eventoGrado, eventoGrado, error) {
-	var cero eventoGrado
-	if periodoID <= 0 || programa.NivelFormacionId == nil {
-		return cero, cero, falloGrado(400, "Periodo o nivel inválido")
+func nivelRaizGrado(programa *programaGrado) (*nivelGrado, error) {
+	if programa == nil || programa.NivelFormacionId == nil {
+		return nil, falloGrado(503, "El programa no tiene nivel de formación verificable")
 	}
 	nivel := programa.NivelFormacionId
 	visitados := make(map[int]bool)
-	for nivel.NivelFormacionPadreId != nil {
-		if visitados[nivel.Id] {
-			return cero, cero, falloGrado(503, "Jerarquía de formación inválida")
+	for {
+		if nivel.Id <= 0 || visitados[nivel.Id] {
+			return nil, falloGrado(503, "Jerarquía de formación inválida")
 		}
 		visitados[nivel.Id] = true
+		if nivel.NivelFormacionPadreId == nil {
+			return nivel, nil
+		}
 		nivel = nivel.NivelFormacionPadreId
 	}
-	if nivel.Id <= 0 {
-		return cero, cero, falloGrado(503, "Nivel de formación inválido")
+}
+
+func categoriaProgramaGrado(programa *programaGrado) (string, error) {
+	raiz, err := nivelRaizGrado(programa)
+	if err != nil {
+		return "", err
+	}
+	categoria := strings.ToUpper(strings.TrimSpace(raiz.CodigoAbreviacion))
+	if categoria != "PRE" && categoria != "POS" {
+		return "", falloGrado(503, "La raíz del nivel de formación no es PRE ni POS")
+	}
+	return categoria, nil
+}
+
+func eventosGrado(ctx context.Context, programa *programaGrado, periodoID int) (eventoGrado, eventoGrado, error) {
+	var cero eventoGrado
+	if periodoID <= 0 {
+		return cero, cero, falloGrado(400, "Periodo inválido")
+	}
+	nivel, err := nivelRaizGrado(programa)
+	if err != nil {
+		return cero, cero, err
 	}
 	calURL, err := baseGrado("UrlCalendarioMid")
 	if err != nil {
@@ -459,8 +501,8 @@ func eventosGrado(ctx context.Context, programa *programaGrado, periodoID int) (
 		return cero, cero, falloGrado(503, "Eventos de Grado ausentes o ambiguos")
 	}
 	for _, ev := range []eventoGrado{ins[0], apr[0]} {
-		d, e := fechaGradoServidor(ev.FechaInicioEvento)
-		f, e2 := fechaGradoServidor(ev.FechaFinEvento)
+		d, e := fechaEventoGrado(ev.FechaInicioEvento)
+		f, e2 := fechaEventoGrado(ev.FechaFinEvento)
 		if e != nil || e2 != nil || f.Before(d) {
 			return cero, cero, falloGrado(503, "Fechas de Calendario inválidas")
 		}
@@ -469,14 +511,18 @@ func eventosGrado(ctx context.Context, programa *programaGrado, periodoID int) (
 }
 
 func validarVentana(ins, apr eventoGrado, primera bool) error {
-	now := time.Now()
-	if !vigenteGrado(apr.FechaInicioEvento, apr.FechaFinEvento, now) {
-		if inicio, err := fechaGradoServidor(apr.FechaInicioEvento); err == nil && now.Before(inicio) {
+	bogota, err := time.LoadLocation("America/Bogota")
+	if err != nil {
+		return falloGrado(http.StatusServiceUnavailable, "Zona horaria de Bogotá no disponible")
+	}
+	now := time.Now().In(bogota)
+	if !vigenteEventoGrado(apr.FechaInicioEvento, apr.FechaFinEvento, now) {
+		if inicio, err := fechaEventoGrado(apr.FechaInicioEvento); err == nil && now.Before(inicio) {
 			return falloGrado(409, "Los tiempos de aprobación aún no han iniciado")
 		}
 		return falloGrado(409, "Los tiempos de aprobación se han cerrado")
 	}
-	if primera && !vigenteGrado(ins.FechaInicioEvento, ins.FechaFinEvento, now) {
+	if primera && !vigenteEventoGrado(ins.FechaInicioEvento, ins.FechaFinEvento, now) {
 		return falloGrado(409, "La inscripción a grado no está abierta")
 	}
 	return nil

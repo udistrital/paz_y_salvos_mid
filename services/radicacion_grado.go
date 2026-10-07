@@ -124,6 +124,10 @@ func RadicarGrado(ctx context.Context, auth string, id int, entrada models.Radic
 	if err != nil {
 		return nil, err
 	}
+	categoria, err := categoriaProgramaGrado(programa)
+	if err != nil {
+		return nil, err
+	}
 	inscripcion, aprobacion, err := eventosGrado(user.Ctx, programa, borrador.Solicitud.PeriodoId)
 	if err != nil {
 		return nil, err
@@ -153,9 +157,13 @@ func RadicarGrado(ctx context.Context, auth string, id int, entrada models.Radic
 	if err != nil {
 		return nil, err
 	}
-	tipos := make([]int, 0, len(tiposSoporteGrado))
-	documentos := make(map[int]bool, len(tiposSoporteGrado))
-	for _, definicion := range tiposSoporteGrado {
+	requeridos, err := soportesRequeridosGrado(categoria)
+	if err != nil {
+		return nil, err
+	}
+	tipos := make([]int, 0, len(requeridos))
+	documentos := make(map[int]bool, len(requeridos))
+	for _, definicion := range requeridos {
 		tipo, err := resolverParametroGrado(user.Ctx, "TIP_SOP_GRADO", definicion.Codigo)
 		if err != nil {
 			return nil, err
@@ -170,10 +178,7 @@ func RadicarGrado(ctx context.Context, auth string, id int, entrada models.Radic
 			}
 		}
 		if soporte == nil {
-			if definicion.Obligatorio {
-				return nil, falloGrado(400, "Carga todos los soportes obligatorios antes de radicar")
-			}
-			continue
+			return nil, falloGrado(400, "Carga todos los soportes obligatorios antes de radicar")
 		}
 		if documentos[soporte.DocumentoId] {
 			return nil, falloGrado(400, "Los soportes deben corresponder a documentos distintos")

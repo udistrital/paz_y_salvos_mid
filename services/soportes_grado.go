@@ -18,15 +18,30 @@ import (
 
 const MaxPDFGrado = 5 * 1024 * 1024
 
-var tiposSoporteGrado = []struct {
+type definicionSoporteGrado struct {
 	Codigo        string
 	TipoDocumento string
-	Obligatorio   bool
-}{
-	{Codigo: "TSG_ACTA_SUST", TipoDocumento: "ACT", Obligatorio: true},
+}
+
+var tiposSoporteGrado = []definicionSoporteGrado{
+	{Codigo: "TSG_ACTA_SUST", TipoDocumento: "ACT"},
 	{Codigo: "TSG_RESULTADO_SABER", TipoDocumento: "SEE"},
-	{Codigo: "TSG_PAGO_DERECHOS", TipoDocumento: "CPDP", Obligatorio: true},
-	{Codigo: "TSG_TITULO_PREVIO", TipoDocumento: "TAP", Obligatorio: true},
+	{Codigo: "TSG_PAGO_DERECHOS", TipoDocumento: "CPDP"},
+	{Codigo: "TSG_TITULO_PREVIO", TipoDocumento: "TAP"},
+}
+
+func soportesRequeridosGrado(categoria string) ([]definicionSoporteGrado, error) {
+	if categoria != "PRE" && categoria != "POS" {
+		return nil, falloGrado(503, "Categoría de nivel de formación inválida")
+	}
+	requeridos := make([]definicionSoporteGrado, 0, len(tiposSoporteGrado))
+	for _, soporte := range tiposSoporteGrado {
+		if categoria == "POS" && soporte.Codigo == "TSG_RESULTADO_SABER" {
+			continue
+		}
+		requeridos = append(requeridos, soporte)
+	}
+	return requeridos, nil
 }
 
 // El tipo de soporte PSGA no es el tipo_documento de Documento CRUD/Nuxeo.
@@ -116,6 +131,10 @@ func validarVentanaSoporte(user *estudianteGrado, b *models.BorradorGrado) error
 	if err != nil {
 		return err
 	}
+	return validarVentanaProgramaSoporte(user, b, programa)
+}
+
+func validarVentanaProgramaSoporte(user *estudianteGrado, b *models.BorradorGrado, programa *programaGrado) error {
 	if programa.DependenciaId != b.Solicitud.DependenciaOikosId {
 		return falloGrado(409, "Programa del borrador inconsistente")
 	}
@@ -124,6 +143,29 @@ func validarVentanaSoporte(user *estudianteGrado, b *models.BorradorGrado) error
 		return err
 	}
 	return validarVentana(eventoGrado{}, apr, false)
+}
+
+func validarCargaSoporteGrado(user *estudianteGrado, b *models.BorradorGrado, codigo string) error {
+	programa, err := resolverProgramaGrado(user.Ctx, user.TerceroID, b.Solicitud.ProgramaAcademicoId)
+	if err != nil {
+		return err
+	}
+	categoria, err := categoriaProgramaGrado(programa)
+	if err != nil {
+		return err
+	}
+	requeridos, err := soportesRequeridosGrado(categoria)
+	if err != nil {
+		return err
+	}
+	permitido := false
+	for _, soporte := range requeridos {
+		permitido = permitido || soporte.Codigo == codigo
+	}
+	if !permitido {
+		return falloGrado(400, "El soporte no aplica para el nivel de formación del programa")
+	}
+	return validarVentanaProgramaSoporte(user, b, programa)
 }
 
 type documentoGrado struct {
@@ -265,7 +307,7 @@ func CargarSoporteGrado(ctx context.Context, auth string, id int, codigo string,
 	if b.Formulario.Id != entrada.FormularioId {
 		return nil, falloGrado(409, "La versión del borrador cambió; recarga sus soportes")
 	}
-	if err := validarVentanaSoporte(user, b); err != nil {
+	if err := validarCargaSoporteGrado(user, b, codigo); err != nil {
 		return nil, err
 	}
 	tipo, err := resolverParametroGrado(user.Ctx, "TIP_SOP_GRADO", codigo)
@@ -318,7 +360,7 @@ func CargarSoporteGrado(ctx context.Context, auth string, id int, codigo string,
 		return nil, falloGrado(503, "El documento almacenado no corresponde al PDF enviado")
 	}
 	// La carga externa puede tardar: se revalida la ventana antes de asociar.
-	if err := validarVentanaSoporte(user, b); err != nil {
+	if err := validarCargaSoporteGrado(user, b, codigo); err != nil {
 		return nil, err
 	}
 	base, err := baseGrado("UrlCrudPazySalvos")
