@@ -85,6 +85,15 @@ func (c *InscripcionGradoController) FiltrosPazSalvos() {
 	c.respuesta(http.StatusOK, resultado, "Filtros de Paz y Salvos consultados")
 }
 
+func (c *InscripcionGradoController) UsuarioPazSalvos() {
+	resultado, err := services.UsuarioPazSalvosGrado(c.Ctx.Request.Context(), c.Ctx.Input.Header("Authorization"), c.GetString("perfil"))
+	if err != nil {
+		c.errorGrado(err)
+		return
+	}
+	c.respuesta(http.StatusOK, resultado, "Usuario de Paz y Salvos consultado")
+}
+
 func (c *InscripcionGradoController) DecidirPazSalvo() {
 	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
 	if err != nil || id <= 0 {

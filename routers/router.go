@@ -22,6 +22,7 @@ func init() {
 		),
 		beego.NSNamespace("/solicitud-grado",
 			beego.NSRouter("/paz-salvos", &controllers.InscripcionGradoController{}, "get:ListarPazSalvos"),
+			beego.NSRouter("/paz-salvos/usuario", &controllers.InscripcionGradoController{}, "get:UsuarioPazSalvos"),
 			beego.NSRouter("/paz-salvos/filtros", &controllers.InscripcionGradoController{}, "get:FiltrosPazSalvos"),
 			beego.NSRouter("/:id/paz-salvos", &controllers.InscripcionGradoController{}, "get:ConsultarPazSalvos"),
 			beego.NSRouter("/:id/paz-salvos/:tipo", &controllers.InscripcionGradoController{}, "post:DecidirPazSalvo"),

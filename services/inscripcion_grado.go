@@ -39,6 +39,7 @@ type estudianteGrado struct {
 
 type programaGrado struct {
 	Id               int         `json:"Id"`
+	Nombre           string      `json:"Nombre"`
 	DependenciaId    int         `json:"DependenciaId"`
 	Activo           bool        `json:"Activo"`
 	NivelFormacionId *nivelGrado `json:"NivelFormacionId"`

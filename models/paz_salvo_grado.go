@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 type PazSalvoGrado struct {
 	Id               int    `json:"Id"`
 	SolicitudGradoId int    `json:"SolicitudGradoId"`
@@ -56,6 +58,35 @@ type FiltrosPazSalvoGrado struct {
 	Periodos   []OpcionFiltroPazSalvoGrado   `json:"Periodos"`
 	Facultades []OpcionFiltroPazSalvoGrado   `json:"Facultades"`
 	Programas  []ProgramaFiltroPazSalvoGrado `json:"Programas"`
+}
+
+type UsuarioPazSalvoGrado struct {
+	NombreCompleto string                     `json:"NombreCompleto"`
+	Facultad       *OpcionFiltroPazSalvoGrado `json:"Facultad,omitempty"`
+}
+
+type CargoLaboratoriosGrado struct {
+	Id                int    `json:"Id"`
+	CodigoAbreviacion string `json:"CodigoAbreviacion"`
+	Activo            bool   `json:"Activo"`
+	TipoParametroId   struct {
+		Id                int    `json:"Id"`
+		CodigoAbreviacion string `json:"CodigoAbreviacion"`
+		Activo            bool   `json:"Activo"`
+	} `json:"TipoParametroId"`
+}
+
+type VinculacionLaboratoriosGrado struct {
+	Id                     int       `json:"Id"`
+	TipoVinculacionId      int       `json:"TipoVinculacionId"`
+	CargoId                int       `json:"CargoId"`
+	DependenciaId          int       `json:"DependenciaId"`
+	FechaInicioVinculacion time.Time `json:"FechaInicioVinculacion"`
+	FechaFinVinculacion    time.Time `json:"FechaFinVinculacion"`
+	Activo                 bool      `json:"Activo"`
+	TerceroPrincipalId     struct {
+		Id int `json:"Id"`
+	} `json:"TerceroPrincipalId"`
 }
 
 type DecidirPazSalvoGrado struct {

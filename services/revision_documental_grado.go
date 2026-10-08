@@ -175,6 +175,14 @@ func facultadesSecretariaGrado(ctx context.Context, documento string) ([]int, er
 }
 
 func dependenciasFacultadesGrado(ctx context.Context, facultades []int) ([]int, error) {
+	return resolverDependenciasFacultadesGrado(ctx, facultades, false)
+}
+
+func dependenciasFacultadesGradoPermitiendoVacio(ctx context.Context, facultades []int) ([]int, error) {
+	return resolverDependenciasFacultadesGrado(ctx, facultades, true)
+}
+
+func resolverDependenciasFacultadesGrado(ctx context.Context, facultades []int, permitirVacio bool) ([]int, error) {
 	base, err := baseGrado("UrlcrudOikos")
 	if err != nil {
 		return nil, err
@@ -184,7 +192,10 @@ func dependenciasFacultadesGrado(ctx context.Context, facultades []int) ([]int, 
 		q := url.Values{"query": {"Padre:" + strconv.Itoa(facultad)}, "limit": {"0"}}
 		var raw json.RawMessage
 		if _, err := request.GetWithContext(ctx, base+"dependencia_padre/?"+q.Encode(), &raw); err != nil {
-			return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo resolver el alcance Oikos de Secretaría")
+			return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo resolver el alcance Oikos de las facultades asignadas")
+		}
+		if permitirVacio && strings.TrimSpace(string(raw)) == "null" {
+			continue
 		}
 		relaciones, err := listaGrado[models.DependenciaPadreOikos](raw)
 		if err != nil {
@@ -197,7 +208,10 @@ func dependenciasFacultadesGrado(ctx context.Context, facultades []int) ([]int, 
 		}
 	}
 	if len(dependencias) == 0 {
-		return nil, falloGrado(http.StatusForbidden, "Las facultades de Secretaría no tienen programas Oikos verificables")
+		if permitirVacio {
+			return []int{}, nil
+		}
+		return nil, falloGrado(http.StatusForbidden, "Las facultades asignadas no tienen programas Oikos verificables")
 	}
 	resultado := make([]int, 0, len(dependencias))
 	for id := range dependencias {
@@ -263,7 +277,7 @@ func validarVentanaAprobacionPazSalvoGrado(ctx context.Context, solicitud models
 	}
 	programas, err := listaGrado[programaGrado](raw)
 	if err != nil || len(programas) != 1 || programas[0].Id != solicitud.ProgramaAcademicoId ||
-		programas[0].DependenciaId != solicitud.DependenciaOikosId || !programas[0].Activo {
+		programas[0].DependenciaId != solicitud.DependenciaOikosId || !programas[0].Activo || strings.TrimSpace(programas[0].Nombre) == "" {
 		return falloGrado(http.StatusServiceUnavailable, "Programa de la solicitud ausente o ambiguo")
 	}
 	inscripcion, aprobacion, err := eventosGrado(ctx, &programas[0], solicitud.PeriodoId)
@@ -276,7 +290,14 @@ func validarVentanaAprobacionPazSalvoGrado(ctx context.Context, solicitud models
 	if inscripcion.EventoId != solicitud.CalendarioEventoInscripcionId {
 		return falloGrado(http.StatusConflict, "La configuración de inscripción cambió; la solicitud requiere revisión")
 	}
-	return validarVentana(inscripcion, aprobacion, false)
+	if err := validarVentana(inscripcion, aprobacion, false); err != nil {
+		if fallo, ok := err.(*ErrorInscripcionGrado); ok && fallo.Status == http.StatusConflict &&
+			fallo.Mensaje == "Los tiempos de aprobación se han cerrado" {
+			return falloGrado(http.StatusConflict, "Los tiempos de aprobación para el programa académico "+strings.TrimSpace(programas[0].Nombre)+" se han cerrado")
+		}
+		return err
+	}
+	return nil
 }
 
 func idsEstadosRevisionGrado(estados map[string]int) []int {

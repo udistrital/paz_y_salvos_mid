@@ -47,6 +47,8 @@ type identidadPazSalvoGrado struct {
 	Ctx       context.Context
 }
 
+const codigoCargoLaboratoriosGrado = "COORD_LAB"
+
 func resolverIdentidadPazSalvoGrado(ctx context.Context, autorizacion string) (*identidadPazSalvoGrado, error) {
 	ctxAutenticado := ctxAutorizado(ctx, autorizacion)
 	usuario, err := sesionAutenticadaGrado(ctxAutenticado, autorizacion)
@@ -168,34 +170,177 @@ func relacionFacultadDependenciaGrado(ctx context.Context, dependencia int) (*mo
 
 func facultadDependenciaGrado(ctx context.Context, dependencia int) (int, error) {
 	relacion, err := relacionFacultadDependenciaGrado(ctx, dependencia)
+	if err == nil {
+		return relacion.Padre.Id, nil
+	}
+
+	base, baseErr := baseGrado("UrlcrudOikos")
+	if baseErr != nil {
+		return 0, err
+	}
+	var directa models.DependenciaOikos
+	nombreFacultad := ""
+	if _, getErr := request.GetWithContext(ctx, base+"dependencia/"+strconv.Itoa(dependencia), &directa); getErr == nil {
+		nombreFacultad = strings.ToUpper(strings.TrimSpace(directa.Nombre))
+	}
+	if directa.Id == dependencia && (nombreFacultad == "FACULTAD" || strings.HasPrefix(nombreFacultad, "FACULTAD ")) {
+		return dependencia, nil
+	}
+	return 0, err
+}
+
+func cargoLaboratoriosGrado(ctx context.Context) (int, error) {
+	parametros, err := baseGrado("UrlcrudParametros")
 	if err != nil {
 		return 0, err
 	}
-	return relacion.Padre.Id, nil
+	q := url.Values{
+		"query": {"CodigoAbreviacion:" + codigoCargoLaboratoriosGrado + ",Activo:true,TipoParametroId.Id:15"},
+		"limit": {"100"},
+	}
+	var raw json.RawMessage
+	if _, err := request.GetWithContext(ctx, parametros+"parametro?"+q.Encode(), &raw); err != nil {
+		return 0, falloGrado(http.StatusServiceUnavailable, "No se pudo verificar el cargo de Coordinación de Laboratorios")
+	}
+	cargos, err := listaGrado[models.CargoLaboratoriosGrado](raw)
+	if err != nil || len(cargos) != 1 || cargos[0].Id <= 0 || !cargos[0].Activo ||
+		cargos[0].CodigoAbreviacion != codigoCargoLaboratoriosGrado ||
+		cargos[0].TipoParametroId.Id != 15 {
+		return 0, falloGrado(http.StatusServiceUnavailable, "El cargo de Coordinación de Laboratorios está ausente o duplicado")
+	}
+	return cargos[0].Id, nil
 }
 
 func facultadesLaboratoriosGrado(actor *identidadPazSalvoGrado) (map[int]bool, error) {
-	core, err := baseGrado("UrlcrudCore")
+	terceros, err := baseGrado("UrlTercerosCrud")
+	if err != nil {
+		return nil, err
+	}
+	cargoID, err := cargoLaboratoriosGrado(actor.Ctx)
 	if err != nil {
 		return nil, err
 	}
 	fecha := time.Now().Format("2006-01-02")
-	q := url.Values{"query": {"TerceroId:" + strconv.Itoa(actor.TerceroID) + ",FechaFin__gte:" + fecha + ",FechaInicio__lte:" + fecha}, "limit": {"0"}}
-	var jefaturas []models.JefeDependencia
-	if _, err := request.GetWithContext(actor.Ctx, core+"jefe_dependencia?"+q.Encode(), &jefaturas); err != nil {
+	q := url.Values{
+		"query": {"CargoId:" + strconv.Itoa(cargoID) + ",Activo:true,FechaFinVinculacion__gte:" + fecha +
+			",FechaInicioVinculacion__lte:" + fecha},
+		"limit": {"0"},
+	}
+	var raw json.RawMessage
+	if _, err := request.GetWithContext(actor.Ctx, terceros+"vinculacion?"+q.Encode(), &raw); err != nil {
 		return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo verificar el alcance de Laboratorios")
 	}
-	facultades := make(map[int]bool)
-	for _, jefatura := range jefaturas {
-		if jefatura.DependenciaId <= 0 {
+	vinculaciones, err := listaGrado[models.VinculacionLaboratoriosGrado](raw)
+	if err != nil {
+		return nil, falloGrado(http.StatusServiceUnavailable, "Respuesta de vinculaciones de Laboratorios inválida")
+	}
+	coordinadores := make(map[int]models.VinculacionLaboratoriosGrado)
+	for _, vinculacion := range vinculaciones {
+		if vinculacion.Id <= 0 || !vinculacion.Activo || vinculacion.CargoId != cargoID ||
+			vinculacion.TerceroPrincipalId.Id <= 0 || vinculacion.DependenciaId <= 0 || vinculacion.FechaInicioVinculacion.IsZero() {
 			continue
 		}
-		facultad, err := facultadDependenciaGrado(actor.Ctx, jefatura.DependenciaId)
-		if err == nil {
+		facultad, err := facultadDependenciaGrado(actor.Ctx, vinculacion.DependenciaId)
+		if err != nil {
+			continue
+		}
+		actual, existe := coordinadores[facultad]
+		if !existe || vinculacion.FechaInicioVinculacion.After(actual.FechaInicioVinculacion) ||
+			(vinculacion.FechaInicioVinculacion.Equal(actual.FechaInicioVinculacion) && vinculacion.Id > actual.Id) {
+			coordinadores[facultad] = vinculacion
+		}
+	}
+	facultades := make(map[int]bool)
+	for facultad, coordinador := range coordinadores {
+		if coordinador.TerceroPrincipalId.Id == actor.TerceroID {
 			facultades[facultad] = true
 		}
 	}
+	if len(facultades) == 0 {
+		return nil, falloGrado(http.StatusForbidden, "El usuario no es el coordinador de Laboratorios vigente más reciente de una facultad verificable")
+	}
 	return facultades, nil
+}
+
+func facultadUsuarioPazSalvosGrado(actor *identidadPazSalvoGrado, perfil string) (*models.OpcionFiltroPazSalvoGrado, error) {
+	facultades := make(map[int]bool)
+	switch contextoPorPerfilGrado[perfil] {
+	case "laboratorios":
+		asignadas, err := facultadesLaboratoriosGrado(actor)
+		if err != nil {
+			return nil, err
+		}
+		facultades = asignadas
+	case "facultad":
+		asignadas, err := facultadesSecretariaGrado(actor.Ctx, actor.Documento)
+		if err != nil {
+			return nil, err
+		}
+		for _, facultad := range asignadas {
+			facultades[facultad] = true
+		}
+	case "programas":
+		dependencias, err := proyectosCoordinacionGrado(actor, perfil)
+		if err != nil {
+			return nil, err
+		}
+		for dependencia := range dependencias {
+			if facultad, err := facultadDependenciaGrado(actor.Ctx, dependencia); err == nil {
+				facultades[facultad] = true
+			}
+		}
+	default:
+		return nil, nil
+	}
+	if len(facultades) != 1 {
+		return nil, nil
+	}
+	facultadID := 0
+	for id := range facultades {
+		facultadID = id
+	}
+	oikos, err := baseGrado("UrlcrudOikos")
+	if err != nil {
+		return nil, err
+	}
+	var facultad models.DependenciaOikos
+	if _, err := request.GetWithContext(actor.Ctx, oikos+"dependencia/"+strconv.Itoa(facultadID), &facultad); err != nil ||
+		facultad.Id != facultadID || strings.TrimSpace(facultad.Nombre) == "" {
+		return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo verificar la facultad asociada al usuario")
+	}
+	return &models.OpcionFiltroPazSalvoGrado{Id: facultad.Id, Nombre: strings.TrimSpace(facultad.Nombre)}, nil
+}
+
+func UsuarioPazSalvosGrado(ctx context.Context, autorizacion, perfil string) (*models.UsuarioPazSalvoGrado, error) {
+	actor, err := resolverIdentidadPazSalvoGrado(ctx, autorizacion)
+	if err != nil {
+		return nil, err
+	}
+	perfil, err = validarPerfilPazSalvoGrado(actor, perfil)
+	if err != nil {
+		return nil, err
+	}
+	terceros, err := baseGrado("UrlTercerosCrud")
+	if err != nil {
+		return nil, err
+	}
+	var tercero struct {
+		Id             int    `json:"Id"`
+		NombreCompleto string `json:"NombreCompleto"`
+		Activo         bool   `json:"Activo"`
+	}
+	if _, err := request.GetWithContext(actor.Ctx, terceros+"tercero/"+strconv.Itoa(actor.TerceroID), &tercero); err != nil {
+		return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo consultar el nombre del usuario")
+	}
+	tercero.NombreCompleto = strings.TrimSpace(tercero.NombreCompleto)
+	if tercero.Id != actor.TerceroID || !tercero.Activo || tercero.NombreCompleto == "" {
+		return nil, falloGrado(http.StatusServiceUnavailable, "El nombre del usuario no es verificable")
+	}
+	facultad, err := facultadUsuarioPazSalvosGrado(actor, perfil)
+	if err != nil {
+		return nil, err
+	}
+	return &models.UsuarioPazSalvoGrado{NombreCompleto: tercero.NombreCompleto, Facultad: facultad}, nil
 }
 
 func validarPerfilPazSalvoGrado(actor *identidadPazSalvoGrado, perfil string) (string, error) {
@@ -230,7 +375,7 @@ func dependenciasPerfilPazSalvoGrado(actor *identidadPazSalvoGrado, perfil strin
 		for id := range facultades {
 			ids = append(ids, id)
 		}
-		return dependenciasFacultadesGrado(actor.Ctx, ids)
+		return dependenciasFacultadesGradoPermitiendoVacio(actor.Ctx, ids)
 	case "facultad":
 		facultades, err := facultadesSecretariaGrado(actor.Ctx, actor.Documento)
 		if err != nil {
@@ -674,8 +819,11 @@ func ListarPazSalvosGrado(ctx context.Context, autorizacion, codigo, perfil stri
 	if err != nil {
 		return nil, err
 	}
-	if facultadID > 0 && len(dependencias) == 0 {
-		return &models.PaginaPazSalvosGrado{Solicitudes: []models.PazSalvosSolicitudGrado{}, TipoGestionado: codigo, TipoGestionadoId: tipos[codigo]}, nil
+	if dependencias != nil && len(dependencias) == 0 {
+		return &models.PaginaPazSalvosGrado{
+			Solicitudes: []models.PazSalvosSolicitudGrado{}, Total: 0,
+			TipoGestionado: codigo, TipoGestionadoId: tipos[codigo],
+		}, nil
 	}
 	terceroID := 0
 	if contextoPorPerfilGrado[perfil] == "propio" {
