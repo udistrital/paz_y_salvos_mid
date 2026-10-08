@@ -75,6 +75,30 @@ func urlUserInfoGrado() (string, error) {
 	return u.String(), nil
 }
 
+func sesionAutenticadaGrado(ctx context.Context, autorizacion string) (*usuarioInfoGrado, error) {
+	if !strings.HasPrefix(autorizacion, "Bearer ") || len(strings.TrimSpace(strings.TrimPrefix(autorizacion, "Bearer "))) < 10 {
+		return nil, falloGrado(http.StatusUnauthorized, "Sesión no autenticada")
+	}
+	usuarioContexto, ok := ctx.Value("user").(string)
+	if !ok || strings.TrimSpace(usuarioContexto) == "" {
+		return nil, falloGrado(http.StatusUnauthorized, "La sesión no es válida")
+	}
+	endpoint, err := urlUserInfoGrado()
+	if err != nil {
+		return nil, err
+	}
+	var usuario usuarioInfoGrado
+	if _, err := request.GetWithContext(ctx, endpoint, &usuario); err != nil {
+		return nil, falloGrado(http.StatusUnauthorized, "No fue posible verificar la sesión")
+	}
+	usuario.Sub = strings.TrimSpace(usuario.Sub)
+	usuario.Documento = strings.TrimSpace(usuario.Documento)
+	if usuario.Sub == "" || usuario.Sub != strings.TrimSpace(usuarioContexto) || usuario.Documento == "" || len(usuario.Role) == 0 {
+		return nil, falloGrado(http.StatusUnauthorized, "La identidad de la sesión no coincide")
+	}
+	return &usuario, nil
+}
+
 func terceroPorDocumentoGrado(ctx context.Context, documento string) (int, error) {
 	base, err := baseGrado("UrlTercerosCrud")
 	if err != nil {
@@ -184,26 +208,10 @@ func dependenciasFacultadesGrado(ctx context.Context, facultades []int) ([]int, 
 }
 
 func resolverSecretariaGrado(ctx context.Context, autorizacion string) (*identidadSecretariaGrado, error) {
-	if !strings.HasPrefix(autorizacion, "Bearer ") || len(strings.TrimSpace(strings.TrimPrefix(autorizacion, "Bearer "))) < 10 {
-		return nil, falloGrado(http.StatusUnauthorized, "Sesión no autenticada")
-	}
-	usuarioContexto, ok := ctx.Value("user").(string)
-	if !ok || strings.TrimSpace(usuarioContexto) == "" {
-		return nil, falloGrado(http.StatusUnauthorized, "La sesión no es válida")
-	}
 	ctxAutenticado := ctxAutorizado(ctx, autorizacion)
-	endpoint, err := urlUserInfoGrado()
+	usuario, err := sesionAutenticadaGrado(ctxAutenticado, autorizacion)
 	if err != nil {
 		return nil, err
-	}
-	var usuario usuarioInfoGrado
-	if _, err := request.GetWithContext(ctxAutenticado, endpoint, &usuario); err != nil {
-		return nil, falloGrado(http.StatusUnauthorized, "No fue posible verificar la sesión")
-	}
-	usuario.Sub = strings.TrimSpace(usuario.Sub)
-	usuario.Documento = strings.TrimSpace(usuario.Documento)
-	if usuario.Sub == "" || usuario.Sub != strings.TrimSpace(usuarioContexto) || usuario.Documento == "" {
-		return nil, falloGrado(http.StatusUnauthorized, "La identidad de la sesión no coincide")
 	}
 	roles, err := rolesUsuarioGrado(usuario.Role)
 	if err != nil {

@@ -31,21 +31,15 @@ type identificacionExpedicionGrado struct {
 }
 
 func identificacionAutenticadaGrado(user *estudianteGrado) (*identificacionExpedicionGrado, map[string]interface{}, error) {
-	endpoint, err := urlUserInfoGrado()
+	autorizacion, _ := user.Ctx.Value("Authorization").(string)
+	sesion, err := sesionAutenticadaGrado(user.Ctx, autorizacion)
 	if err != nil {
 		return nil, nil, err
 	}
-	var sesion usuarioInfoGrado
-	if _, err := request.GetWithContext(user.Ctx, endpoint, &sesion); err != nil {
-		return nil, nil, falloGrado(http.StatusUnauthorized, "No fue posible verificar la sesión")
-	}
-	sesion.Sub = strings.TrimSpace(sesion.Sub)
-	sesion.Documento = strings.TrimSpace(sesion.Documento)
-	usuarioContexto, _ := user.Ctx.Value("user").(string)
 	if err := validarLugarExpedicionTerceros.Struct(struct {
 		Sub       string `validate:"required"`
 		Documento string `validate:"required"`
-	}{Sub: sesion.Sub, Documento: sesion.Documento}); err != nil || sesion.Sub != strings.TrimSpace(usuarioContexto) {
+	}{Sub: sesion.Sub, Documento: sesion.Documento}); err != nil {
 		return nil, nil, falloGrado(http.StatusUnauthorized, "La identidad de la sesión no coincide")
 	}
 

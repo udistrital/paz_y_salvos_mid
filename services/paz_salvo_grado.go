@@ -48,26 +48,10 @@ type identidadPazSalvoGrado struct {
 }
 
 func resolverIdentidadPazSalvoGrado(ctx context.Context, autorizacion string) (*identidadPazSalvoGrado, error) {
-	if !strings.HasPrefix(autorizacion, "Bearer ") || len(strings.TrimSpace(strings.TrimPrefix(autorizacion, "Bearer "))) < 10 {
-		return nil, falloGrado(http.StatusUnauthorized, "Sesión no autenticada")
-	}
-	usuarioContexto, ok := ctx.Value("user").(string)
-	if !ok || strings.TrimSpace(usuarioContexto) == "" {
-		return nil, falloGrado(http.StatusUnauthorized, "La sesión no es válida")
-	}
 	ctxAutenticado := ctxAutorizado(ctx, autorizacion)
-	endpoint, err := urlUserInfoGrado()
+	usuario, err := sesionAutenticadaGrado(ctxAutenticado, autorizacion)
 	if err != nil {
 		return nil, err
-	}
-	var usuario usuarioInfoGrado
-	if _, err := request.GetWithContext(ctxAutenticado, endpoint, &usuario); err != nil {
-		return nil, falloGrado(http.StatusUnauthorized, "No fue posible verificar la sesión")
-	}
-	usuario.Sub = strings.TrimSpace(usuario.Sub)
-	usuario.Documento = strings.TrimSpace(usuario.Documento)
-	if usuario.Sub == "" || usuario.Sub != strings.TrimSpace(usuarioContexto) || usuario.Documento == "" {
-		return nil, falloGrado(http.StatusUnauthorized, "La identidad de la sesión no coincide")
 	}
 	roles, err := rolesUsuarioGrado(usuario.Role)
 	if err != nil {
