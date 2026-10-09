@@ -47,7 +47,13 @@ type identidadPazSalvoGrado struct {
 	Ctx       context.Context
 }
 
-const codigoCargoLaboratoriosGrado = "COORD_LAB"
+const (
+	codigoCargoLaboratoriosGrado = "COORD_LAB"
+	codigoAreaCargosGrado        = "C"
+	nombreAreaCargosGrado        = "Contratación"
+	codigoTipoCargosGrado        = "C"
+	nombreTipoCargosGrado        = "Cargos"
+)
 
 func resolverIdentidadPazSalvoGrado(ctx context.Context, autorizacion string) (*identidadPazSalvoGrado, error) {
 	ctxAutenticado := ctxAutorizado(ctx, autorizacion)
@@ -151,18 +157,19 @@ func proyectosCoordinacionGrado(actor *identidadPazSalvoGrado, perfil string) (m
 	return homologarProyectosGrado(actor.Ctx, lista)
 }
 
-func relacionFacultadDependenciaGrado(ctx context.Context, dependencia int) (*models.DependenciaPadreOikos, error) {
-	base, err := baseGrado("UrlcrudOikos")
+func relacionFacultadDependenciaGrado(ctx context.Context, dependencia int) (*models.DependenciaPadreOikosV2, error) {
+	base, err := baseOikosGradoV2()
 	if err != nil {
 		return nil, err
 	}
-	q := url.Values{"query": {"Hija:" + strconv.Itoa(dependencia)}, "limit": {"0"}}
+	q := url.Values{"query": {"HijaId.Id:" + strconv.Itoa(dependencia) + ",Activo:true"}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(ctx, base+"dependencia_padre/?"+q.Encode(), &raw); err != nil {
 		return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo verificar la facultad de la solicitud")
 	}
-	relaciones, err := listaGrado[models.DependenciaPadreOikos](raw)
-	if err != nil || len(relaciones) != 1 || relaciones[0].Hija.Id != dependencia || relaciones[0].Padre.Id <= 0 {
+	relaciones, err := listaGrado[models.DependenciaPadreOikosV2](raw)
+	if err != nil || len(relaciones) != 1 || !relaciones[0].Activo || relaciones[0].HijaId.Id != dependencia ||
+		!relaciones[0].HijaId.Activo || relaciones[0].PadreId.Id <= 0 || !relaciones[0].PadreId.Activo {
 		return nil, falloGrado(http.StatusServiceUnavailable, "Facultad de la solicitud ausente o ambigua")
 	}
 	return &relaciones[0], nil
@@ -171,19 +178,19 @@ func relacionFacultadDependenciaGrado(ctx context.Context, dependencia int) (*mo
 func facultadDependenciaGrado(ctx context.Context, dependencia int) (int, error) {
 	relacion, err := relacionFacultadDependenciaGrado(ctx, dependencia)
 	if err == nil {
-		return relacion.Padre.Id, nil
+		return relacion.PadreId.Id, nil
 	}
 
-	base, baseErr := baseGrado("UrlcrudOikos")
+	base, baseErr := baseOikosGradoV2()
 	if baseErr != nil {
 		return 0, err
 	}
-	var directa models.DependenciaOikos
+	var directa models.DependenciaOikosV2
 	nombreFacultad := ""
 	if _, getErr := request.GetWithContext(ctx, base+"dependencia/"+strconv.Itoa(dependencia), &directa); getErr == nil {
 		nombreFacultad = strings.ToUpper(strings.TrimSpace(directa.Nombre))
 	}
-	if directa.Id == dependencia && (nombreFacultad == "FACULTAD" || strings.HasPrefix(nombreFacultad, "FACULTAD ")) {
+	if directa.Id == dependencia && directa.Activo && (nombreFacultad == "FACULTAD" || strings.HasPrefix(nombreFacultad, "FACULTAD ")) {
 		return dependencia, nil
 	}
 	return 0, err
@@ -194,18 +201,45 @@ func cargoLaboratoriosGrado(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	q := url.Values{
-		"query": {"CodigoAbreviacion:" + codigoCargoLaboratoriosGrado + ",Activo:true,TipoParametroId.Id:15"},
-		"limit": {"100"},
+	areaQuery := url.Values{
+		"query": {"CodigoAbreviacion:" + codigoAreaCargosGrado + ",Nombre:" + nombreAreaCargosGrado + ",Activo:true"},
+		"limit": {"0"},
 	}
 	var raw json.RawMessage
+	if _, err := request.GetWithContext(ctx, parametros+"area_tipo?"+areaQuery.Encode(), &raw); err != nil {
+		return 0, falloGrado(http.StatusServiceUnavailable, "No se pudo verificar el área de Cargos")
+	}
+	areas, err := listaGrado[models.AreaCargoLaboratoriosGrado](raw)
+	if err != nil || len(areas) != 1 || areas[0].Id <= 0 || !areas[0].Activo ||
+		areas[0].CodigoAbreviacion != codigoAreaCargosGrado || areas[0].Nombre != nombreAreaCargosGrado {
+		return 0, falloGrado(http.StatusServiceUnavailable, "El área de Cargos está ausente o duplicada")
+	}
+	tipoQuery := url.Values{
+		"query": {"CodigoAbreviacion:" + codigoTipoCargosGrado + ",Nombre:" + nombreTipoCargosGrado +
+			",Activo:true,AreaTipoId.Id:" + strconv.Itoa(areas[0].Id)},
+		"limit": {"0"},
+	}
+	if _, err := request.GetWithContext(ctx, parametros+"tipo_parametro?"+tipoQuery.Encode(), &raw); err != nil {
+		return 0, falloGrado(http.StatusServiceUnavailable, "No se pudo verificar el tipo Cargos")
+	}
+	tipos, err := listaGrado[models.TipoCargoLaboratoriosGrado](raw)
+	if err != nil || len(tipos) != 1 || tipos[0].Id <= 0 || !tipos[0].Activo ||
+		tipos[0].CodigoAbreviacion != codigoTipoCargosGrado || tipos[0].Nombre != nombreTipoCargosGrado ||
+		tipos[0].AreaTipoId.Id != areas[0].Id {
+		return 0, falloGrado(http.StatusServiceUnavailable, "El tipo Cargos está ausente o duplicado")
+	}
+	q := url.Values{
+		"query": {"CodigoAbreviacion:" + codigoCargoLaboratoriosGrado + ",Activo:true,TipoParametroId.Id:" + strconv.Itoa(tipos[0].Id)},
+		"limit": {"0"},
+	}
 	if _, err := request.GetWithContext(ctx, parametros+"parametro?"+q.Encode(), &raw); err != nil {
 		return 0, falloGrado(http.StatusServiceUnavailable, "No se pudo verificar el cargo de Coordinación de Laboratorios")
 	}
 	cargos, err := listaGrado[models.CargoLaboratoriosGrado](raw)
 	if err != nil || len(cargos) != 1 || cargos[0].Id <= 0 || !cargos[0].Activo ||
 		cargos[0].CodigoAbreviacion != codigoCargoLaboratoriosGrado ||
-		cargos[0].TipoParametroId.Id != 15 {
+		cargos[0].TipoParametroId.Id != tipos[0].Id || cargos[0].TipoParametroId.CodigoAbreviacion != codigoTipoCargosGrado ||
+		!cargos[0].TipoParametroId.Activo {
 		return 0, falloGrado(http.StatusServiceUnavailable, "El cargo de Coordinación de Laboratorios está ausente o duplicado")
 	}
 	return cargos[0].Id, nil
@@ -220,7 +254,11 @@ func facultadesLaboratoriosGrado(actor *identidadPazSalvoGrado) (map[int]bool, e
 	if err != nil {
 		return nil, err
 	}
-	fecha := time.Now().Format("2006-01-02")
+	bogota, err := time.LoadLocation("America/Bogota")
+	if err != nil {
+		return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo resolver la fecha vigente de Laboratorios")
+	}
+	fecha := time.Now().In(bogota).Format("2006-01-02")
 	q := url.Values{
 		"query": {"CargoId:" + strconv.Itoa(cargoID) + ",Activo:true,FechaFinVinculacion__gte:" + fecha +
 			",FechaInicioVinculacion__lte:" + fecha},
@@ -240,14 +278,28 @@ func facultadesLaboratoriosGrado(actor *identidadPazSalvoGrado) (map[int]bool, e
 			vinculacion.TerceroPrincipalId.Id <= 0 || vinculacion.DependenciaId <= 0 || vinculacion.FechaInicioVinculacion.IsZero() {
 			continue
 		}
-		facultad, err := facultadDependenciaGrado(actor.Ctx, vinculacion.DependenciaId)
+		facultad, err := facultadLaboratoriosGrado(actor.Ctx, vinculacion.DependenciaId)
 		if err != nil {
-			continue
+			return nil, err
 		}
 		actual, existe := coordinadores[facultad]
 		if !existe || vinculacion.FechaInicioVinculacion.After(actual.FechaInicioVinculacion) ||
 			(vinculacion.FechaInicioVinculacion.Equal(actual.FechaInicioVinculacion) && vinculacion.Id > actual.Id) {
 			coordinadores[facultad] = vinculacion
+		}
+	}
+	if len(coordinadores) > 0 {
+		// Verificar que el destino del mapeo sea realmente una facultad institucional.
+		oikos, err := baseOikosGradoV2()
+		if err != nil {
+			return nil, err
+		}
+		for facultadID := range coordinadores {
+			var facultad models.DependenciaOikosV2
+			if _, err := request.GetWithContext(actor.Ctx, oikos+"dependencia/"+strconv.Itoa(facultadID), &facultad); err != nil ||
+				facultad.Id != facultadID || !facultad.Activo || !strings.HasPrefix(strings.ToUpper(strings.TrimSpace(facultad.Nombre)), "FACULTAD ") {
+				return nil, falloGrado(http.StatusServiceUnavailable, "La facultad configurada de Laboratorios no es verificable")
+			}
 		}
 	}
 	facultades := make(map[int]bool)
@@ -299,13 +351,13 @@ func facultadUsuarioPazSalvosGrado(actor *identidadPazSalvoGrado, perfil string)
 	for id := range facultades {
 		facultadID = id
 	}
-	oikos, err := baseGrado("UrlcrudOikos")
+	oikos, err := baseOikosGradoV2()
 	if err != nil {
 		return nil, err
 	}
-	var facultad models.DependenciaOikos
+	var facultad models.DependenciaOikosV2
 	if _, err := request.GetWithContext(actor.Ctx, oikos+"dependencia/"+strconv.Itoa(facultadID), &facultad); err != nil ||
-		facultad.Id != facultadID || strings.TrimSpace(facultad.Nombre) == "" {
+		facultad.Id != facultadID || !facultad.Activo || strings.TrimSpace(facultad.Nombre) == "" {
 		return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo verificar la facultad asociada al usuario")
 	}
 	return &models.OpcionFiltroPazSalvoGrado{Id: facultad.Id, Nombre: strings.TrimSpace(facultad.Nombre)}, nil
@@ -522,7 +574,7 @@ func filtrosPazSalvosGrado(actor *identidadPazSalvoGrado, dependencias []int) (*
 			dependenciasPrograma[programa.DependenciaId] = true
 		}
 	}
-	oikos, err := baseGrado("UrlcrudOikos")
+	oikos, err := baseOikosGradoV2()
 	if err != nil {
 		return nil, err
 	}
@@ -531,22 +583,23 @@ func filtrosPazSalvosGrado(actor *identidadPazSalvoGrado, dependencias []int) (*
 		return nil, err
 	}
 	var relacionesRaw json.RawMessage
-	if _, err := request.GetWithContext(actor.Ctx, oikos+"dependencia_padre/?limit=0", &relacionesRaw); err != nil {
+	if _, err := request.GetWithContext(actor.Ctx, oikos+"dependencia_padre/?"+url.Values{"query": {"Activo:true"}, "limit": {"0"}}.Encode(), &relacionesRaw); err != nil {
 		return nil, falloGrado(http.StatusServiceUnavailable, "No se pudieron consultar las facultades autorizadas")
 	}
-	relaciones, err := listaGrado[models.DependenciaPadreOikos](relacionesRaw)
+	relaciones, err := listaGrado[models.DependenciaPadreOikosV2](relacionesRaw)
 	if err != nil {
 		return nil, falloGrado(http.StatusServiceUnavailable, "Jerarquía de facultades inválida")
 	}
-	padresPorDependencia := make(map[int]models.DependenciaOikos, len(dependenciasPrograma))
+	padresPorDependencia := make(map[int]models.DependenciaOikosV2, len(dependenciasPrograma))
 	for _, relacion := range relaciones {
-		if !dependenciasPrograma[relacion.Hija.Id] || !facultadesValidas[relacion.Padre.Id] {
+		if !relacion.Activo || !relacion.HijaId.Activo || !relacion.PadreId.Activo ||
+			!dependenciasPrograma[relacion.HijaId.Id] || !facultadesValidas[relacion.PadreId.Id] {
 			continue
 		}
-		if existente, ok := padresPorDependencia[relacion.Hija.Id]; ok && existente.Id != relacion.Padre.Id {
+		if existente, ok := padresPorDependencia[relacion.HijaId.Id]; ok && existente.Id != relacion.PadreId.Id {
 			return nil, falloGrado(http.StatusServiceUnavailable, "Facultad de programa ambigua")
 		}
-		padresPorDependencia[relacion.Hija.Id] = relacion.Padre
+		padresPorDependencia[relacion.HijaId.Id] = relacion.PadreId
 	}
 	facultades := make(map[int]string)
 	programasVistos := make(map[int]bool)
@@ -585,8 +638,9 @@ func facultadesOikosGrado(ctx context.Context, oikos string) (map[int]bool, erro
 	tipos, err := listaGrado[struct {
 		Id     int    `json:"Id"`
 		Nombre string `json:"Nombre"`
+		Activo bool   `json:"Activo"`
 	}](tipoRaw)
-	if err != nil || len(tipos) != 1 || tipos[0].Id <= 0 || !strings.EqualFold(strings.TrimSpace(tipos[0].Nombre), "FACULTAD") {
+	if err != nil || len(tipos) != 1 || tipos[0].Id <= 0 || !tipos[0].Activo || !strings.EqualFold(strings.TrimSpace(tipos[0].Nombre), "FACULTAD") {
 		return nil, falloGrado(http.StatusServiceUnavailable, "Tipo de dependencia Facultad ausente o ambiguo")
 	}
 
@@ -596,6 +650,7 @@ func facultadesOikosGrado(ctx context.Context, oikos string) (map[int]bool, erro
 		return nil, falloGrado(http.StatusServiceUnavailable, "No se pudieron verificar las dependencias Facultad")
 	}
 	asociaciones, err := listaGrado[struct {
+		Activo        bool `json:"Activo"`
 		DependenciaId struct {
 			Id int `json:"Id"`
 		} `json:"DependenciaId"`
@@ -608,7 +663,7 @@ func facultadesOikosGrado(ctx context.Context, oikos string) (map[int]bool, erro
 	}
 	facultades := make(map[int]bool)
 	for _, asociacion := range asociaciones {
-		if asociacion.TipoDependenciaId.Id == tipos[0].Id && asociacion.DependenciaId.Id > 0 {
+		if asociacion.Activo && asociacion.TipoDependenciaId.Id == tipos[0].Id && asociacion.DependenciaId.Id > 0 {
 			facultades[asociacion.DependenciaId.Id] = true
 		}
 	}
@@ -903,7 +958,7 @@ func DescargarSoportePazSalvoGrado(ctx context.Context, autorizacion string, id 
 	if err != nil {
 		return nil, err
 	}
-	if tipoCheckPorPerfilGrado[perfil] != codigoCheck {
+	if tipoCheckPorPerfilGrado[perfil] == "" || tipoCheckPorPerfilGrado[perfil] != codigoCheck {
 		return nil, falloGrado(http.StatusForbidden, "El funcionario no puede consultar este Paz y Salvo")
 	}
 	tipos, estados, err := catalogoPazSalvoGrado(actor.Ctx)
@@ -948,7 +1003,7 @@ func DecidirPazSalvoGrado(ctx context.Context, autorizacion string, id int, codi
 	if err != nil {
 		return nil, err
 	}
-	if tipoCheckPorPerfilGrado[perfil] != codigo {
+	if tipoCheckPorPerfilGrado[perfil] == "" || tipoCheckPorPerfilGrado[perfil] != codigo {
 		return nil, falloGrado(http.StatusForbidden, "El funcionario no puede decidir este Paz y Salvo")
 	}
 	estado := strings.ToUpper(strings.TrimSpace(entrada.Estado))

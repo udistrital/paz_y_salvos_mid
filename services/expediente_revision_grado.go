@@ -143,7 +143,7 @@ func resolverProgramaRevisionGrado(ctx context.Context, programaID, dependenciaI
 	if err != nil {
 		return "", err
 	}
-	q := url.Values{"query": {fmt.Sprintf("Id:%d,DependenciaId:%d,Activo:true", programaID, dependenciaID)}, "limit": {"100"}}
+	q := url.Values{"query": {fmt.Sprintf("Id:%d,DependenciaId:%d,Activo:true", programaID, dependenciaID)}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(ctx, base+"proyecto_academico_institucion?"+q.Encode(), &raw); err != nil {
 		return "", falloGrado(http.StatusServiceUnavailable, "No se pudo consultar el programa académico")
@@ -165,7 +165,7 @@ func resolverPeriodoRevisionGrado(ctx context.Context, periodoID int) (string, e
 	if err != nil {
 		return "", err
 	}
-	q := url.Values{"query": {fmt.Sprintf("Id:%d,Activo:true", periodoID)}, "limit": {"100"}}
+	q := url.Values{"query": {fmt.Sprintf("Id:%d,Activo:true", periodoID)}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(ctx, base+"periodo?"+q.Encode(), &raw); err != nil {
 		return "", falloGrado(http.StatusServiceUnavailable, "No se pudo consultar el periodo académico")
@@ -186,7 +186,7 @@ func resolverModalidadRevisionGrado(ctx context.Context, codigo string) (string,
 	if err != nil {
 		return "", err
 	}
-	q := url.Values{"query": {"CodigoAbreviacion:" + codigo + ",TipoParametroId.CodigoAbreviacion:MOD_TRG,TipoParametroId.Activo:true,Activo:true"}, "limit": {"100"}}
+	q := url.Values{"query": {"CodigoAbreviacion:" + codigo + ",TipoParametroId.CodigoAbreviacion:MOD_TRG,TipoParametroId.Activo:true,Activo:true"}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(ctx, base+"parametro?"+q.Encode(), &raw); err != nil {
 		return "", falloGrado(http.StatusServiceUnavailable, "No se pudo consultar la modalidad de grado")

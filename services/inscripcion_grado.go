@@ -123,7 +123,26 @@ func resolverEstudiante(ctx context.Context, autorizacion string, terceroID int)
 	if terceroID <= 0 {
 		return nil, falloGrado(http.StatusBadRequest, "Tercero requerido")
 	}
-	return &estudianteGrado{TerceroID: terceroID, Ctx: ctxAutorizado(ctx, autorizacion)}, nil
+	ctxAutenticado := ctxAutorizado(ctx, autorizacion)
+	usuario, err := sesionAutenticadaGrado(ctxAutenticado, autorizacion)
+	if err != nil {
+		return nil, err
+	}
+	roles, err := rolesUsuarioGrado(usuario.Role)
+	if err != nil {
+		return nil, err
+	}
+	if !contieneRolGrado(roles, "ESTUDIANTE") {
+		return nil, falloGrado(http.StatusForbidden, "La inscripción a grado requiere el rol ESTUDIANTE")
+	}
+	titular, err := terceroPorDocumentoGrado(ctxAutenticado, usuario.Documento)
+	if err != nil {
+		return nil, err
+	}
+	if terceroID != titular {
+		return nil, falloGrado(http.StatusForbidden, "El tercero solicitado no pertenece al estudiante autenticado")
+	}
+	return &estudianteGrado{TerceroID: titular, Ctx: ctxAutenticado}, nil
 }
 
 func resolverEstadoBorrador(ctx context.Context) (int, error) {
@@ -166,7 +185,7 @@ func resolverParametroGrado(ctx context.Context, tipoCodigo, codigo string) (int
 	if err != nil {
 		return 0, err
 	}
-	query := url.Values{"query": {"CodigoAbreviacion:" + codigo + ",Activo:true,TipoParametroId.CodigoAbreviacion:" + tipoCodigo + ",TipoParametroId.Activo:true,TipoParametroId.AreaTipoId.CodigoAbreviacion:PSGA,TipoParametroId.AreaTipoId.Activo:true"}, "limit": {"100"}}
+	query := url.Values{"query": {"CodigoAbreviacion:" + codigo + ",Activo:true,TipoParametroId.CodigoAbreviacion:" + tipoCodigo + ",TipoParametroId.Activo:true,TipoParametroId.AreaTipoId.CodigoAbreviacion:PSGA,TipoParametroId.AreaTipoId.Activo:true"}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(ctx, paramURL+"parametro?"+query.Encode(), &raw); err != nil {
 		return 0, falloGrado(http.StatusServiceUnavailable, "No se pudo resolver "+codigo)
@@ -263,7 +282,7 @@ func resolverProgramaGrado(ctx context.Context, terceroID, programaID int) (*pro
 		return nil, err
 	}
 	var paramRaw json.RawMessage
-	query := url.Values{"query": {"CodigoAbreviacion:EST,TipoParametroId.CodigoAbreviacion:TV,Activo:true"}, "limit": {"100"}}
+	query := url.Values{"query": {"CodigoAbreviacion:EST,TipoParametroId.CodigoAbreviacion:TV,Activo:true"}, "limit": {"0"}}
 	if _, err := request.GetWithContext(ctx, paramURL+"parametro?"+query.Encode(), &paramRaw); err != nil {
 		return nil, falloGrado(503, "Vinculación estudiantil no verificable")
 	}
@@ -277,7 +296,7 @@ func resolverProgramaGrado(ctx context.Context, terceroID, programaID int) (*pro
 	if err != nil {
 		return nil, err
 	}
-	q := url.Values{"query": {fmt.Sprintf("TerceroPrincipalId.Id:%d,TipoVinculacionId:%d,Activo:true", terceroID, tipos[0].Id)}, "limit": {"100"}}
+	q := url.Values{"query": {fmt.Sprintf("TerceroPrincipalId.Id:%d,TipoVinculacionId:%d,Activo:true", terceroID, tipos[0].Id)}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(ctx, tercerosURL+"vinculacion?"+q.Encode(), &raw); err != nil {
 		return nil, falloGrado(503, "No se pudo verificar la vinculación")
@@ -312,7 +331,7 @@ func resolverProgramaGrado(ctx context.Context, terceroID, programaID int) (*pro
 				continue
 			}
 		}
-		q := url.Values{"query": {fmt.Sprintf("DependenciaId:%d,Activo:true", v.DependenciaId)}, "limit": {"100"}}
+		q := url.Values{"query": {fmt.Sprintf("DependenciaId:%d,Activo:true", v.DependenciaId)}, "limit": {"0"}}
 		var proyectosRaw json.RawMessage
 		if _, err := request.GetWithContext(ctx, proyectosURL+"proyecto_academico_institucion?"+q.Encode(), &proyectosRaw); err != nil {
 			return nil, falloGrado(503, "No se pudo validar el programa")
@@ -348,7 +367,7 @@ func resolverCodigoPrograma(ctx context.Context, terceroID, dependenciaOikosID i
 	if err != nil {
 		return "", err
 	}
-	q := url.Values{"query": {fmt.Sprintf("Activo:true,TerceroId.Id:%d,TipoDocumentoId.CodigoAbreviacion:CODE", terceroID)}, "limit": {"100"}}
+	q := url.Values{"query": {fmt.Sprintf("Activo:true,TerceroId.Id:%d,TipoDocumentoId.CodigoAbreviacion:CODE", terceroID)}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(ctx, tercerosURL+"datos_identificacion?"+q.Encode(), &raw); err != nil {
 		return "", falloGrado(503, "No se pudieron consultar los códigos estudiantiles")
@@ -359,7 +378,7 @@ func resolverCodigoPrograma(ctx context.Context, terceroID, dependenciaOikosID i
 			Id int `json:"Id"`
 		} `json:"TerceroId"`
 	}](raw)
-	if err != nil || len(identificaciones) == 0 || len(identificaciones) >= 100 {
+	if err != nil || len(identificaciones) == 0 {
 		return "", falloGrado(503, "Códigos estudiantiles ausentes o incompletos")
 	}
 	wsURL, err := baseGrado("UrlcrudWSO2")

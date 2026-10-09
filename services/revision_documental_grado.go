@@ -104,7 +104,7 @@ func terceroPorDocumentoGrado(ctx context.Context, documento string) (int, error
 	if err != nil {
 		return 0, err
 	}
-	q := url.Values{"query": {"Numero:" + documento + ",Activo:true"}, "limit": {"100"}}
+	q := url.Values{"query": {"Numero:" + documento + ",Activo:true"}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(ctx, base+"datos_identificacion?"+q.Encode(), &raw); err != nil {
 		return 0, falloGrado(http.StatusServiceUnavailable, "No se pudo verificar la identidad del funcionario")
@@ -183,13 +183,13 @@ func dependenciasFacultadesGradoPermitiendoVacio(ctx context.Context, facultades
 }
 
 func resolverDependenciasFacultadesGrado(ctx context.Context, facultades []int, permitirVacio bool) ([]int, error) {
-	base, err := baseGrado("UrlcrudOikos")
+	base, err := baseOikosGradoV2()
 	if err != nil {
 		return nil, err
 	}
 	dependencias := make(map[int]bool)
 	for _, facultad := range facultades {
-		q := url.Values{"query": {"Padre:" + strconv.Itoa(facultad)}, "limit": {"0"}}
+		q := url.Values{"query": {"PadreId.Id:" + strconv.Itoa(facultad) + ",Activo:true"}, "limit": {"0"}}
 		var raw json.RawMessage
 		if _, err := request.GetWithContext(ctx, base+"dependencia_padre/?"+q.Encode(), &raw); err != nil {
 			return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo resolver el alcance Oikos de las facultades asignadas")
@@ -197,13 +197,14 @@ func resolverDependenciasFacultadesGrado(ctx context.Context, facultades []int, 
 		if permitirVacio && strings.TrimSpace(string(raw)) == "null" {
 			continue
 		}
-		relaciones, err := listaGrado[models.DependenciaPadreOikos](raw)
+		relaciones, err := listaGrado[models.DependenciaPadreOikosV2](raw)
 		if err != nil {
 			return nil, falloGrado(http.StatusServiceUnavailable, "Jerarquía Oikos no verificable")
 		}
 		for _, relacion := range relaciones {
-			if relacion.Padre.Id == facultad && relacion.Hija.Id > 0 {
-				dependencias[relacion.Hija.Id] = true
+			if relacion.Activo && relacion.PadreId.Id == facultad && relacion.PadreId.Activo &&
+				relacion.HijaId.Id > 0 && relacion.HijaId.Activo {
+				dependencias[relacion.HijaId.Id] = true
 			}
 		}
 	}
@@ -270,7 +271,7 @@ func validarVentanaAprobacionPazSalvoGrado(ctx context.Context, solicitud models
 	if err != nil {
 		return err
 	}
-	q := url.Values{"query": {"Id:" + strconv.Itoa(solicitud.ProgramaAcademicoId) + ",Activo:true"}, "limit": {"100"}}
+	q := url.Values{"query": {"Id:" + strconv.Itoa(solicitud.ProgramaAcademicoId) + ",Activo:true"}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(ctx, base+"proyecto_academico_institucion?"+q.Encode(), &raw); err != nil {
 		return falloGrado(http.StatusServiceUnavailable, "No se pudo verificar el programa de la solicitud")

@@ -65,6 +65,21 @@ type UsuarioPazSalvoGrado struct {
 	Facultad       *OpcionFiltroPazSalvoGrado `json:"Facultad,omitempty"`
 }
 
+type AreaCargoLaboratoriosGrado struct {
+	Id                int    `json:"Id"`
+	Nombre            string `json:"Nombre"`
+	CodigoAbreviacion string `json:"CodigoAbreviacion"`
+	Activo            bool   `json:"Activo"`
+}
+
+type TipoCargoLaboratoriosGrado struct {
+	Id                int                        `json:"Id"`
+	Nombre            string                     `json:"Nombre"`
+	CodigoAbreviacion string                     `json:"CodigoAbreviacion"`
+	Activo            bool                       `json:"Activo"`
+	AreaTipoId        AreaCargoLaboratoriosGrado `json:"AreaTipoId"`
+}
+
 type CargoLaboratoriosGrado struct {
 	Id                int    `json:"Id"`
 	CodigoAbreviacion string `json:"CodigoAbreviacion"`
