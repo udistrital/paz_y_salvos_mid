@@ -47,13 +47,13 @@ func identificacionAutenticadaGrado(user *estudianteGrado) (*identificacionExped
 	if err != nil {
 		return nil, nil, err
 	}
-	q := url.Values{"query": {fmt.Sprintf("Activo:true,TerceroId.Id:%d,Numero:%s", user.TerceroID, sesion.Documento)}, "limit": {"100"}}
+	q := url.Values{"query": {fmt.Sprintf("Activo:true,TerceroId.Id:%d,Numero:%s", user.TerceroID, sesion.Documento)}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(user.Ctx, base+"datos_identificacion?"+q.Encode(), &raw); err != nil {
 		return nil, nil, falloGrado(http.StatusServiceUnavailable, "No se pudo consultar el lugar de expedición en Terceros")
 	}
 	registros, err := listaGrado[map[string]interface{}](raw)
-	if err != nil || len(registros) == 0 || len(registros) >= 100 {
+	if err != nil || len(registros) == 0 {
 		return nil, nil, falloGrado(http.StatusServiceUnavailable, "Datos de identificación ausentes o incompletos")
 	}
 

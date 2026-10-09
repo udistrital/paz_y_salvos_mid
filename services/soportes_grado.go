@@ -196,7 +196,7 @@ func resolverTipoDocumentoGrado(ctx context.Context, codigo string) (int, error)
 	if err != nil {
 		return 0, err
 	}
-	q := url.Values{"query": {"CodigoAbreviacion:" + codigo + ",Activo:true"}, "limit": {"100"}}
+	q := url.Values{"query": {"CodigoAbreviacion:" + codigo + ",Activo:true"}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(ctx, base+"tipo_documento?"+q.Encode(), &raw); err != nil {
 		return 0, falloGrado(503, "No se pudo resolver el tipo documental")
