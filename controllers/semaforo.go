@@ -6,12 +6,12 @@ import (
 	"github.com/udistrital/paz_y_salvos_mid/services"
 )
 
-// SemaforoController operations for Semaforo
+// SemaforoController expone las consultas del semáforo por estudiante y ámbito institucional.
 type SemaforoController struct {
 	beego.Controller
 }
 
-// URLMapping ...
+// URLMapping asocia las operaciones de consulta con sus métodos HTTP.
 func (c *SemaforoController) URLMapping() {
 	c.Mapping("ObtenerEstudiante", c.ObtenerEstudiante)
 	c.Mapping("ObtenerEstudiantes", c.ObtenerEstudiantes)
@@ -20,7 +20,7 @@ func (c *SemaforoController) URLMapping() {
 	c.Mapping("ObtenerEstudiantesFacultadLaboratorios", c.ObtenerEstudiantesFacultadLaboratorios)
 }
 
-// ObtenerSemaforosAsistente ...
+// ObtenerSemaforosAsistente consulta los semáforos de proyectos asignados al asistente.
 // @Title ObtenerSemaforosAsistente
 // @Description Obtiene los semáforos de los proyectos donde el usuario es asistente de proyecto
 // @Param	cedula	path	string	true	"Cédula del asistente"
@@ -49,7 +49,7 @@ func (c *SemaforoController) ObtenerSemaforosAsistente() {
 	}
 }
 
-// ObtenerEstudiante ...
+// ObtenerEstudiante consulta el semáforo asociado al código estudiantil.
 // @Title ObtenerEstudiante
 // @Description Obtiene información del semáforo de un estudiante por código
 // @Param	codigo	path	int	true	"Código del estudiante"
@@ -71,7 +71,7 @@ func (c *SemaforoController) ObtenerEstudiante() {
 	}
 }
 
-// ObtenerEstudiantes ...
+// ObtenerEstudiantes lista semáforos con filtros y paginación opcionales.
 // @Title ObtenerEstudiantes
 // @Description obtener todos los estudiantes con filtros opcionales
 // @Param	limit	query	int	false	"Número de registros por página"
@@ -90,7 +90,7 @@ func (c *SemaforoController) ObtenerEstudiantes() {
 	limit, _ := c.GetInt("limit", 10)
 	offset, _ := c.GetInt("offset", 0)
 
-	// Obtener parámetros de filtro opcionales
+	// Los filtros opcionales acotan el listado institucional.
 	codigo := c.GetString("codigo")
 	idFacultad, _ := c.GetInt("idFacultad", 0)
 	idProyecto, _ := c.GetInt("idProyecto", 0)
@@ -101,7 +101,7 @@ func (c *SemaforoController) ObtenerEstudiantes() {
 	helpers.RenderResponse(&c.Controller, resp)
 }
 
-// ObtenerEstudiantesProyecto ...
+// ObtenerEstudiantesProyecto lista estudiantes de proyectos del coordinador.
 // @Title ObtenerEstudiantesProyecto
 // @Description Obtiene los estudiantes de los proyectos del coordinador e incluye información de proyectos asignados
 // @Param	id_coordinador	path 	int	true	"ID del coordinador"
@@ -120,7 +120,7 @@ func (c *SemaforoController) ObtenerEstudiantesProyecto() {
 		limit, _ := c.GetInt("limit", 10)
 		offset, _ := c.GetInt("offset", 0)
 
-		// Obtener parámetros de filtro opcionales
+		// Los filtros opcionales acotan los proyectos del coordinador.
 		codigo := c.GetString("codigo")
 		idProyecto, _ := c.GetInt("idProyecto", 0)
 		anio, _ := c.GetInt("anio", 0)
@@ -131,7 +131,7 @@ func (c *SemaforoController) ObtenerEstudiantesProyecto() {
 	}
 }
 
-// ObtenerEstudiantesFacultad ...
+// ObtenerEstudiantesFacultad lista estudiantes de las facultades del secretario.
 // @Title ObtenerEstudiantesFacultad
 // @Description obtener estudiantes por facultad del secretario academico
 // @Param	id_secretario	path 	int	true	"ID del secretario académico"
@@ -151,7 +151,7 @@ func (c *SemaforoController) ObtenerEstudiantesFacultad() {
 		limit, _ := c.GetInt("limit", 10)
 		offset, _ := c.GetInt("offset", 0)
 
-		// Obtener parámetros de filtro opcionales
+		// Los filtros opcionales acotan las facultades del secretario.
 		codigo := c.GetString("codigo")
 		idProyecto, _ := c.GetInt("idProyecto", 0)
 		anio, _ := c.GetInt("anio", 0)
@@ -162,7 +162,7 @@ func (c *SemaforoController) ObtenerEstudiantesFacultad() {
 	}
 }
 
-// ObtenerEstudiantesFacultadLaboratorios ...
+// ObtenerEstudiantesFacultadLaboratorios lista estudiantes del ámbito de Laboratorios.
 // @Title ObtenerEstudiantesFacultadLaboratorios
 // @Description obtener estudiantes por facultad del coordinador de laboratorios
 // @Param	id_coordinador_lab	path 	int	true	"ID del coordinador de laboratorios"
@@ -182,7 +182,7 @@ func (c *SemaforoController) ObtenerEstudiantesFacultadLaboratorios() {
 		limit, _ := c.GetInt("limit", 10)
 		offset, _ := c.GetInt("offset", 0)
 
-		// Obtener parámetros de filtro opcionales
+		// Los filtros opcionales acotan el ámbito de Laboratorios.
 		codigo := c.GetString("codigo")
 		idProyecto, _ := c.GetInt("idProyecto", 0)
 		anio, _ := c.GetInt("anio", 0)

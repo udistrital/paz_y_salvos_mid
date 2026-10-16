@@ -22,7 +22,7 @@ var rolesCheckGrado = map[string][]string{
 	"TPS_LABORATORIOS": {"LABORATORIOS"},
 	"TPS_BIENESTAR":    {"ADMIN_BIENESTAR"},
 	"TPS_URELINTER":    {"URELINTER"},
-	"TPS_EXTENSION":    {"EXTENSION"},
+	"TPS_EXTENSION":    {"EXTENSION", "EXTENSION_PASANTIAS"},
 	"TPS_SECRETARIA":   {rolSecretariaAcademica},
 }
 
@@ -30,14 +30,14 @@ var tipoCheckPorPerfilGrado = map[string]string{
 	"COORDINADOR": "TPS_COORDINACION", "ASIS_PROYECTO": "TPS_COORDINACION", "CONTRATISTA": "TPS_COORDINACION",
 	"ASIS_FINANCIERA": "TPS_FINANCIERO", "BIBLIOTECA": "TPS_BIBLIOTECA",
 	"LABORATORIOS": "TPS_LABORATORIOS", "ADMIN_BIENESTAR": "TPS_BIENESTAR",
-	"URELINTER": "TPS_URELINTER", "EXTENSION": "TPS_EXTENSION", rolSecretariaAcademica: "TPS_SECRETARIA",
+	"URELINTER": "TPS_URELINTER", "EXTENSION": "TPS_EXTENSION", "EXTENSION_PASANTIAS": "TPS_EXTENSION", rolSecretariaAcademica: "TPS_SECRETARIA",
 }
 
 var contextoPorPerfilGrado = map[string]string{
 	"ESTUDIANTE": "propio", "ASIS_PROYECTO": "programas", "CONTRATISTA": "programas",
 	"COORDINADOR": "programas", rolSecretariaAcademica: "facultad", "LABORATORIOS": "laboratorios",
 	"ADMIN_SGA": "global", "ASIS_FINANCIERA": "global", "BIBLIOTECA": "global",
-	"ADMIN_BIENESTAR": "global", "URELINTER": "global", "ADMISIONES_REG": "global", "EXTENSION": "global",
+	"ADMIN_BIENESTAR": "global", "URELINTER": "global", "ADMISIONES_REG": "global", "EXTENSION": "global", "EXTENSION_PASANTIAS": "global",
 }
 
 type identidadPazSalvoGrado struct {
@@ -1010,8 +1010,8 @@ func DecidirPazSalvoGrado(ctx context.Context, autorizacion string, id int, codi
 	if estado != "PS_PENDIENTE" && estado != "PS_APROBADO" && estado != "PS_DESAPROBADO" {
 		return nil, falloGrado(http.StatusBadRequest, "Estado de Paz y Salvo inválido")
 	}
-	if (estado == "PS_PENDIENTE" || estado == "PS_DESAPROBADO") && strings.TrimSpace(entrada.Justificacion) == "" {
-		return nil, falloGrado(http.StatusBadRequest, "La reapertura o desaprobación requiere justificación")
+	if (estado == "PS_PENDIENTE" || estado == "PS_DESAPROBADO" || codigo == "TPS_SECRETARIA") && strings.TrimSpace(entrada.Justificacion) == "" {
+		return nil, falloGrado(http.StatusBadRequest, "La decisión requiere justificación")
 	}
 	tipos, estados, err := catalogoPazSalvoGrado(actor.Ctx)
 	if err != nil {

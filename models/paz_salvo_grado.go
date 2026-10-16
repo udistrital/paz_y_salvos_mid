@@ -42,6 +42,21 @@ type PaginaPazSalvosGrado struct {
 	TipoGestionadoId int                       `json:"TipoGestionadoId"`
 }
 
+type SolicitudAprobadaSecretariaGrado struct {
+	SolicitudId         int       `json:"SolicitudId"`
+	TerceroId           int       `json:"TerceroId"`
+	CodigoEstudiante    string    `json:"CodigoEstudiante"`
+	PeriodoId           int       `json:"PeriodoId"`
+	ProgramaAcademicoId int       `json:"ProgramaAcademicoId"`
+	DependenciaOikosId  int       `json:"DependenciaOikosId"`
+	FechaAprobacion     time.Time `json:"FechaAprobacion"`
+}
+
+type PaginaAprobadosSecretariaGrado struct {
+	Solicitudes []SolicitudAprobadaSecretariaGrado `json:"Solicitudes"`
+	Total       int                                `json:"Total"`
+}
+
 type OpcionFiltroPazSalvoGrado struct {
 	Id     int    `json:"Id"`
 	Nombre string `json:"Nombre"`
