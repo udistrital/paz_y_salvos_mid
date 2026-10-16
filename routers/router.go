@@ -1,6 +1,6 @@
 // @APIVersion 1.0.0
-// @Title beego Test API
-// @Description beego has a very cool tools to autogenerate documents for your API
+// @Title Paz y Salvos MID
+// @Description Orquesta consultas y decisiones del semáforo y de solicitudes de grado
 // @Contact astaxie@gmail.com
 // @TermsOfServiceUrl http://beego.me/
 // @License Apache 2.0
@@ -21,6 +21,7 @@ func init() {
 			),
 		),
 		beego.NSNamespace("/solicitud-grado",
+			beego.NSRouter("/paz-salvos/aprobados", &controllers.InscripcionGradoController{}, "get:ListarAprobadosSecretaria"),
 			beego.NSRouter("/paz-salvos", &controllers.InscripcionGradoController{}, "get:ListarPazSalvos"),
 			beego.NSRouter("/paz-salvos/usuario", &controllers.InscripcionGradoController{}, "get:UsuarioPazSalvos"),
 			beego.NSRouter("/paz-salvos/filtros", &controllers.InscripcionGradoController{}, "get:FiltrosPazSalvos"),
@@ -30,10 +31,16 @@ func init() {
 			beego.NSRouter("/revision/filtros", &controllers.InscripcionGradoController{}, "get:FiltrosRevisionDocumental"),
 			beego.NSRouter("/revision", &controllers.InscripcionGradoController{}, "get:ListarRevisionDocumental"),
 			beego.NSRouter("/revision/:id", &controllers.InscripcionGradoController{}, "get:ConsultarRevisionDocumental;post:RevisarDocumentacion"),
+			beego.NSRouter("/revision/:id/versiones", &controllers.InscripcionGradoController{}, "get:ListarVersionesSecretaria"),
+			beego.NSRouter("/revision/:id/versiones/:numero", &controllers.InscripcionGradoController{}, "get:ConsultarVersionSecretaria"),
+			beego.NSRouter("/revision/:id/versiones/:numero/soportes/:tipo", &controllers.InscripcionGradoController{}, "get:DescargarVersionSecretaria"),
 			beego.NSRouter("/revision/:id/soportes/:tipo", &controllers.InscripcionGradoController{}, "get:DescargarSoporteRevision"),
 			beego.NSRouter("/borrador/:id/radicar", &controllers.InscripcionGradoController{}, "post:Radicar"),
 			beego.NSRouter("/borrador/:id/subsanar", &controllers.InscripcionGradoController{}, "post:Subsanar"),
 			beego.NSRouter("/borrador/:id/soportes", &controllers.InscripcionGradoController{}, "get:ListarSoportes"),
+			beego.NSRouter("/borrador/:id/versiones", &controllers.InscripcionGradoController{}, "get:ListarVersionesEstudiante"),
+			beego.NSRouter("/borrador/:id/versiones/:numero", &controllers.InscripcionGradoController{}, "get:ConsultarVersionEstudiante"),
+			beego.NSRouter("/borrador/:id/versiones/:numero/soportes/:tipo", &controllers.InscripcionGradoController{}, "get:DescargarVersionEstudiante"),
 			beego.NSRouter("/borrador/:id/soportes/:tipo", &controllers.InscripcionGradoController{}, "put:CargarSoporte;get:DescargarSoporte;delete:EliminarSoporte"),
 			beego.NSRouter("/directores", &controllers.InscripcionGradoController{}, "get:ListarDirectores"),
 			beego.NSRouter("/modalidades", &controllers.InscripcionGradoController{}, "get:ListarModalidades"),
