@@ -22,7 +22,7 @@ func externalRequestContext(ctx context.Context) context.Context {
 // ConsultarSemaforosAsistente consulta los proyectos donde el usuario es asistente y retorna los semáforos de esos proyectos
 func ConsultarSemaforosAsistente(ctx context.Context, cedula string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) models.APIResponse {
 	ctx = externalRequestContext(ctx)
-	// 1. Consultar proyectos donde es asistente
+	// Obtiene los proyectos asignados al asistente desde Académica.
 	urlAsistente :=
 		helpers.ConfigString("UrlcrudWSO2") +
 			helpers.ConfigString("NscrudAcademica") +
@@ -40,7 +40,7 @@ func ConsultarSemaforosAsistente(ctx context.Context, cedula string, limit int, 
 			proyectos = append(proyectos, proyecto.Proyecto)
 		}
 	}
-	// Validar si es asistente por la cantidad de proyectos obtenidos
+	// La consulta requiere al menos un proyecto asignado.
 	esAsistente := len(proyectos) > 0
 
 	if !esAsistente {
@@ -53,9 +53,9 @@ func ConsultarSemaforosAsistente(ctx context.Context, cedula string, limit int, 
 		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "El asistente no tiene proyectos asignados.", Data: resp}
 	}
 
-	// 2. Homologar con servicio de homologación
+	// Homologa cada código académico a la dependencia Oikos correspondiente.
 	var idsOikos []int
-	proyectosMap := make(map[int]models.ProyectoAsignado) // Mapa para eliminar duplicados por IdOikos
+	proyectosMap := make(map[int]models.ProyectoAsignado) // Evita repetir proyectos por ID Oikos.
 	for _, cod := range proyectos {
 		urlHom :=
 			helpers.ConfigString("UrlcrudWSO2") +
@@ -69,7 +69,7 @@ func ConsultarSemaforosAsistente(ctx context.Context, cedula string, limit int, 
 		}
 		idOikos := resHom.OikosId()
 		if idOikos > 0 {
-			// Solo agregar si no existe ya en el mapa (evita duplicados por IdOikos)
+			// Cada dependencia Oikos aparece una sola vez en el resultado.
 			if _, existe := proyectosMap[idOikos]; !existe {
 				idsOikos = append(idsOikos, idOikos)
 				urlOikos := helpers.ConfigString("UrlcrudOikos") + "dependencia/" + fmt.Sprintf("%d", idOikos)
@@ -85,7 +85,7 @@ func ConsultarSemaforosAsistente(ctx context.Context, cedula string, limit int, 
 			}
 		}
 	}
-	// Convertir el mapa a slice
+	// Prepara la lista de proyectos incluidos en la respuesta.
 	var proyectosAsignados []models.ProyectoAsignado
 	for _, proyecto := range proyectosMap {
 		proyectosAsignados = append(proyectosAsignados, proyecto)
@@ -95,11 +95,11 @@ func ConsultarSemaforosAsistente(ctx context.Context, cedula string, limit int, 
 		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "No se encontraron proyectos oikos para el asistente.", Data: nil}
 	}
 
-	// 3. Construir query con filtros
+	// Acota la consulta del semáforo a los proyectos acreditados.
 	var queryParts []string
-	// Si se proporciona idProyecto, filtrar solo por ese proyecto
+	// Un proyecto solicitado debe pertenecer a las asignaciones del asistente.
 	if idProyecto > 0 {
-		// Verificar que el proyecto pertenece a los asignados al asistente
+		// Impide consultar proyectos fuera del ámbito del asistente.
 		proyectoValido := false
 		for _, id := range idsOikos {
 			if id == idProyecto {
@@ -189,7 +189,7 @@ func ConsultarEstudiantes(ctx context.Context, limit int, offset int, codigo str
 
 	queryString := strings.Join(queryParts, ",")
 
-	// Construir el query
+	// Aplica los filtros y la paginación solicitados.
 	query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
 
 	return obtenerSemaforos(ctx, query, "No se encontraron estudiantes activos.")
@@ -197,7 +197,7 @@ func ConsultarEstudiantes(ctx context.Context, limit int, offset int, codigo str
 
 func ConsultarEstudiantesProyecto(ctx context.Context, id_coordinador string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) models.APIResponse {
 	ctx = externalRequestContext(ctx)
-	// 1. Consultar proyectos del coordinador
+	// Consulta los códigos académicos asignados al coordinador.
 	urlCoord :=
 		helpers.ConfigString("UrlcrudWSO2") +
 			helpers.ConfigString("NscrudAcademica") +
@@ -228,7 +228,7 @@ func ConsultarEstudiantesProyecto(ctx context.Context, id_coordinador string, li
 		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "El coordinador no tiene proyectos asociados.", Data: resp}
 	}
 
-	// 2. Homologar con servicio de homologación
+	// Asocia los proyectos académicos con dependencias Oikos únicas.
 	var idsOikos []int
 	proyectosMap := make(map[int]models.ProyectoAsignado)
 
@@ -262,7 +262,7 @@ func ConsultarEstudiantesProyecto(ctx context.Context, id_coordinador string, li
 		}
 	}
 
-	// Convertir el mapa a slice
+	// Incluye los proyectos autorizados en la respuesta.
 	var proyectosAsignados []models.ProyectoAsignado
 	for _, proyecto := range proyectosMap {
 		proyectosAsignados = append(proyectosAsignados, proyecto)
@@ -272,12 +272,12 @@ func ConsultarEstudiantesProyecto(ctx context.Context, id_coordinador string, li
 		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "No se encontraron proyectos oikos para el coordinador.", Data: nil}
 	}
 
-	// 3. Construir query con filtros
+	// Restringe el semáforo a los proyectos asignados al coordinador.
 	var queryParts []string
 
-	// Si se proporciona idProyecto, filtrar solo por ese proyecto
+	// Un proyecto solicitado debe pertenecer a las asignaciones del coordinador.
 	if idProyecto > 0 {
-		// Verificar que el proyecto pertenece a los asignados al coordinador
+		// Impide consultar proyectos fuera de su ámbito.
 		proyectoValido := false
 		for _, id := range idsOikos {
 			if id == idProyecto {
@@ -290,7 +290,7 @@ func ConsultarEstudiantesProyecto(ctx context.Context, id_coordinador string, li
 		}
 		queryParts = append(queryParts, fmt.Sprintf("IdProyectoOikos:%d", idProyecto))
 	} else {
-		// Si no se proporciona proyecto, usar todos los asignados
+		// Sin proyecto específico, consulta todos los proyectos acreditados.
 		proyectosQuery := "IdProyectoOikos:"
 		for i, id := range idsOikos {
 			if i > 0 {
@@ -316,7 +316,7 @@ func ConsultarEstudiantesProyecto(ctx context.Context, id_coordinador string, li
 	queryString := strings.Join(queryParts, ",")
 	query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
 
-	// Obtener los semáforos
+	// Conserva el total filtrado y los registros de la página solicitada.
 	resp := obtenerSemaforos(ctx, query, "No se encontraron estudiantes activos para los proyectos del coordinador.")
 
 	var semaforosTable []models.SemaforoTable
@@ -343,11 +343,7 @@ func ConsultarEstudiantesProyecto(ctx context.Context, id_coordinador string, li
 
 func ConsultarEstudiantesFacultad(ctx context.Context, id_secretario string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) models.APIResponse {
 	ctx = externalRequestContext(ctx)
-	// 1. Consultar facultades del secretario
-	// urlSec :=
-	// 	helpers.ConfigString("UrlcrudWSO2") +
-	// 	helpers.ConfigString("NscrudAcademica") +
-	// 	"/facultad_secretaria/" + id_secretario
+	// Consulta las facultades asociadas al secretario académico.
 
 	urlSec :=
 		helpers.ConfigString("UrlcrudWSO2") +
@@ -371,7 +367,7 @@ func ConsultarEstudiantesFacultad(ctx context.Context, id_secretario string, lim
 		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "El secretario no tiene facultades asociadas.", Data: nil}
 	}
 
-	// 2. Homologar con servicio de homologación
+	// Homologa los códigos de facultad a las dependencias Oikos.
 	var idsOikos []int
 	for _, cod := range codigosCondor {
 		urlHom :=
@@ -394,7 +390,7 @@ func ConsultarEstudiantesFacultad(ctx context.Context, id_secretario string, lim
 		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "No se encontraron facultades oikos para el secretario.", Data: nil}
 	}
 
-	// 3. Construir query con OR para facultades
+	// Incluye las facultades acreditadas en el filtro de la consulta.
 	var queryParts []string
 	queryParts = append(queryParts, "IdFacultadOikos:")
 	for i, id := range idsOikos {
@@ -422,7 +418,7 @@ func ConsultarEstudiantesFacultad(ctx context.Context, id_secretario string, lim
 	queryString := strings.Join(queryParts, ",")
 	query := fmt.Sprintf("?query=%s&limit=%d&offset=%d", queryString, limit, offset)
 
-	// Obtener el primer ID de facultad (si hay múltiples, tomamos el primero)
+	// La respuesta identifica la primera facultad acreditada.
 	var idFacultadOikos int
 	if len(idsOikos) > 0 {
 		idFacultadOikos = idsOikos[0]
@@ -434,8 +430,7 @@ func ConsultarEstudiantesFacultad(ctx context.Context, id_secretario string, lim
 func ConsultarEstudiantesFacultadLaboratorios(ctx context.Context, id_coordinador_lab string, limit int, offset int, codigo string, idProyecto int, anio int, periodo int) models.APIResponse {
 	ctx = externalRequestContext(ctx)
 
-	// 1. Consultar de que dependencias es jefe
-	// Obtener la fecha actual en formato YYYY-MM-DD
+	// Consulta las dependencias bajo jefatura vigente en la fecha actual.
 	fechaActual := time.Now().Format("2006-01-02")
 
 	urlJefe :=
@@ -469,7 +464,7 @@ func ConsultarEstudiantesFacultadLaboratorios(ctx context.Context, id_coordinado
 		})
 	}
 
-	// Filtrar solo dependencias cuyo nombre contiene "laboratorio" (ignorando mayúsculas/minúsculas)
+	// Identifica laboratorios por nombre, sin distinguir mayúsculas.
 	var laboratorios []models.DependenciaConNombre
 	for _, dep := range dependenciasConNombre {
 		if dep.Nombre != "" && helpers.ContainsIgnoreCase(dep.Nombre, "laboratorio") {
@@ -477,10 +472,10 @@ func ConsultarEstudiantesFacultadLaboratorios(ctx context.Context, id_coordinado
 		}
 	}
 
-	// Si no hay dependencias de laboratorios, probablemente es el decano de la facultad
+	// Sin laboratorios identificados, consulta las dependencias asociadas al jefe.
 	if len(laboratorios) == 0 {
 		logs.Info("No se encontraron dependencias de laboratorios. Probablemente es el decano de la facultad.")
-		// Se usa el id obtenido en dependencias con nombre para armar el query y obtener el semaforo
+		// Acota el semáforo a las dependencias asociadas al jefe.
 		var idsDependencias []int
 		for _, dep := range dependenciasConNombre {
 			idsDependencias = append(idsDependencias, dep.DependenciaId)
@@ -526,11 +521,11 @@ func ConsultarEstudiantesFacultadLaboratorios(ctx context.Context, id_coordinado
 		return obtenerSemaforosConFacultad(ctx, query, "No se encontraron estudiantes activos en las facultades asociadas al decano.", idFacultadOikos)
 
 	} else {
-		// Se consulta la dependencia padre de las dependencias obtenidas
+		// Resuelve la facultad padre de cada laboratorio identificado.
 		logs.Info("Dependencias de laboratorios encontradas: %d", len(laboratorios))
 
 		var facultadesOikos []int
-		facultadesMap := make(map[int]bool) // Para rastrear facultades únicas
+		facultadesMap := make(map[int]bool) // Deduplica las facultades padre.
 
 		for _, lab := range laboratorios {
 			labId := lab.DependenciaId
@@ -539,7 +534,7 @@ func ConsultarEstudiantesFacultadLaboratorios(ctx context.Context, id_coordinado
 				continue
 			}
 
-			// Consultar información completa del laboratorio para obtener su padre
+			// Consulta la relación padre de la dependencia de laboratorio.
 			urlLabDep :=
 				helpers.ConfigString("UrlcrudOikos") +
 					"dependencia_padre/?query=Hija:" + fmt.Sprintf("%d", labId)
@@ -564,7 +559,7 @@ func ConsultarEstudiantesFacultadLaboratorios(ctx context.Context, id_coordinado
 			return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "No se encontraron facultades asociadas a los laboratorios del coordinador.", Data: nil}
 		}
 
-		// Alertar si se encontraron múltiples facultades diferentes
+		// Registra cuando los laboratorios pertenecen a varias facultades.
 		if len(facultadesOikos) > 1 {
 			logs.Warn("ALERTA: El coordinador de laboratorios tiene laboratorios en %d facultades diferentes: %v", len(facultadesOikos), facultadesOikos)
 			fmt.Printf("ALERTA: Se encontraron laboratorios en %d facultades diferentes: %v\n", len(facultadesOikos), facultadesOikos)
@@ -628,10 +623,10 @@ func obtenerSemaforos(ctx context.Context, query, notFoundMsg string) models.API
 		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: notFoundMsg, Data: nil}
 	}
 
-	// Consultar el total de registros (sin limit)
+	// Cuenta todos los registros del filtro, independientemente de la página.
 	totalCount := 0
 	queryCount := query
-	// Remover limit y offset del query para contar todos
+	// Retira la paginación de la consulta de conteo.
 	if strings.Contains(queryCount, "&limit=") {
 		parts := strings.Split(queryCount, "&limit=")
 		queryCount = parts[0] + "&limit=-1"
@@ -648,10 +643,10 @@ func obtenerSemaforos(ctx context.Context, query, notFoundMsg string) models.API
 		totalCount = len(resCount.Data)
 	}
 
-	// Reutiliza la lógica de enriquecimiento
+	// Completa los nombres de estudiante, facultad y proyecto de la página.
 	tabla := consultarDataSemaforo(ctx, semaforos)
 
-	// Retornar con metadatos de paginación
+	// Adjunta el total y el tamaño de la página al listado.
 	result := models.SemaforosResponse{
 		Semaforos:  tabla,
 		TotalCount: totalCount,
@@ -661,7 +656,7 @@ func obtenerSemaforos(ctx context.Context, query, notFoundMsg string) models.API
 	return models.APIResponse{Success: true, Status: http.StatusOK, Message: "Consulta exitosa", Data: result}
 }
 
-// obtenerSemaforosConFacultad es similar a obtenerSemaforos pero incluye el IdFacultadOikos en la respuesta
+// obtenerSemaforosConFacultad devuelve una página de semáforos con su facultad Oikos y el total filtrado.
 func obtenerSemaforosConFacultad(ctx context.Context, query, notFoundMsg string, idFacultadOikos int) models.APIResponse {
 	var res models.APIResponseData[[]models.Semaforo]
 
@@ -682,10 +677,10 @@ func obtenerSemaforosConFacultad(ctx context.Context, query, notFoundMsg string,
 		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: notFoundMsg, Data: nil}
 	}
 
-	// Consultar el total de registros (sin limit)
+	// Cuenta todos los registros del filtro, independientemente de la página.
 	totalCount := 0
 	queryCount := query
-	// Remover limit y offset del query para contar todos
+	// Retira la paginación de la consulta de conteo.
 	if strings.Contains(queryCount, "&limit=") {
 		parts := strings.Split(queryCount, "&limit=")
 		queryCount = parts[0] + "&limit=-1"
@@ -746,7 +741,7 @@ func consultarDataSemaforo(ctx context.Context, semaforos []models.Semaforo) []m
 			nombreFacultad = resFac.Nombre
 		}
 
-		// // 3. Nombre del proyecto
+		// Obtiene el nombre del proyecto curricular desde Oikos.
 		urlProj :=
 			helpers.ConfigString("UrlcrudOikos") +
 				"dependencia/" + fmt.Sprintf("%d", s.IdProyectoOikos)

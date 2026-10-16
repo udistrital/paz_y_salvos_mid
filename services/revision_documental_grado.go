@@ -422,7 +422,14 @@ func detalleRevisionCRUD(ctx context.Context, id, dependenciaID int, estados []i
 	var respuesta models.APIResponseData[models.BorradorGrado]
 	status, err := request.GetWithContext(ctx, base+"solicitud-grado/revision/"+strconv.Itoa(id)+"?"+q.Encode(), &respuesta)
 	if err != nil {
-		return nil, status, err
+		switch status {
+		case http.StatusNotFound:
+			return nil, status, falloGrado(http.StatusNotFound, "Solicitud no encontrada en el ámbito autorizado")
+		case http.StatusConflict:
+			return nil, status, falloGrado(http.StatusConflict, "La versión no admite revisión documental")
+		default:
+			return nil, status, falloGrado(http.StatusServiceUnavailable, "No se pudo consultar el expediente documental")
+		}
 	}
 	if status != http.StatusOK || !respuesta.Success || respuesta.Status != http.StatusOK || respuesta.Data.Solicitud.DependenciaOikosId != dependenciaID {
 		return nil, status, falloGrado(http.StatusServiceUnavailable, "Respuesta de expediente inválida")
@@ -677,7 +684,7 @@ func DescargarSoporteRevisionGrado(ctx context.Context, auth string, id int, cod
 }
 
 func RevisarDocumentacionSecretariaGrado(ctx context.Context, auth string, id int, entrada models.RevisarDocumentacionGrado) (*models.SolicitudRevisionGrado, error) {
-	if id <= 0 || entrada.FormularioId <= 0 || len(entrada.Soportes) < 3 || len(entrada.Soportes) > 4 {
+	if id <= 0 || entrada.FormularioId <= 0 || len(entrada.Soportes) == 0 {
 		return nil, falloGrado(http.StatusBadRequest, "Solicitud, versión y decisiones de soportes son obligatorias")
 	}
 	secretaria, err := resolverSecretariaGrado(ctx, auth)

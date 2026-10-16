@@ -30,6 +30,9 @@ func ListarDirectoresGrado(ctx context.Context, auth string, terceroID int) ([]m
 	if err != nil {
 		return nil, err
 	}
+	if err := verificarVinculacionEstudianteGrado(user.Ctx, user.TerceroID); err != nil {
+		return nil, err
+	}
 	base, err := baseGrado("UrlAcademicaCore")
 	if err != nil {
 		return nil, err
@@ -82,6 +85,9 @@ func ValidarDirectorGrado(ctx context.Context, auth string, terceroID int, ident
 func ListarModalidadesGrado(ctx context.Context, auth string, terceroID int) ([]models.ModalidadGrado, error) {
 	user, err := resolverEstudiante(ctx, auth, terceroID)
 	if err != nil {
+		return nil, err
+	}
+	if err := verificarVinculacionEstudianteGrado(user.Ctx, user.TerceroID); err != nil {
 		return nil, err
 	}
 	base, err := baseGrado("UrlcrudParametros")
@@ -234,6 +240,9 @@ func ListarPaisesExpedicionGrado(ctx context.Context, auth string, terceroID int
 	if err != nil {
 		return nil, err
 	}
+	if err := verificarVinculacionEstudianteGrado(user.Ctx, user.TerceroID); err != nil {
+		return nil, err
+	}
 	catalogo, err := nuevoCatalogoUbicacionGrado(user.Ctx)
 	if err != nil {
 		return nil, err
@@ -268,6 +277,9 @@ func ListarDepartamentosExpedicionGrado(ctx context.Context, auth string, tercer
 	if err != nil {
 		return nil, err
 	}
+	if err := verificarVinculacionEstudianteGrado(user.Ctx, user.TerceroID); err != nil {
+		return nil, err
+	}
 	catalogo, err := nuevoCatalogoUbicacionGrado(user.Ctx)
 	if err != nil {
 		return nil, err
@@ -300,6 +312,9 @@ func ListarLugaresExpedicionGrado(ctx context.Context, auth string, terceroID, p
 	}
 	user, err := resolverEstudiante(ctx, auth, terceroID)
 	if err != nil {
+		return nil, err
+	}
+	if err := verificarVinculacionEstudianteGrado(user.Ctx, user.TerceroID); err != nil {
 		return nil, err
 	}
 	catalogo, err := nuevoCatalogoUbicacionGrado(user.Ctx)

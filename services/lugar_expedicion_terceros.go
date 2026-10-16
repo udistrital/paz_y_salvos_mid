@@ -112,6 +112,9 @@ func RegistrarLugarExpedicionIdentificacionGrado(ctx context.Context, auth strin
 	if err != nil {
 		return nil, err
 	}
+	if err := verificarVinculacionEstudianteGrado(user.Ctx, user.TerceroID); err != nil {
+		return nil, err
+	}
 	identificacion, original, err := identificacionAutenticadaGrado(user)
 	if err != nil {
 		return nil, err
