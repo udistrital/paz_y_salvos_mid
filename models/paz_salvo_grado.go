@@ -1,0 +1,126 @@
+package models
+
+import "time"
+
+type PazSalvoGrado struct {
+	Id               int    `json:"Id"`
+	SolicitudGradoId int    `json:"SolicitudGradoId"`
+	TipoPazSalvoId   int    `json:"TipoPazSalvoId"`
+	TipoCodigo       string `json:"TipoCodigo"`
+}
+
+type HistorialPazSalvoGrado struct {
+	Id                int    `json:"Id"`
+	PazSalvoId        int    `json:"PazSalvoId"`
+	TerceroId         int    `json:"TerceroId"`
+	EstadoPazSalvoId  int    `json:"EstadoPazSalvoId"`
+	EstadoCodigo      string `json:"EstadoCodigo"`
+	Justificacion     string `json:"Justificacion"`
+	FechaCreacion     string `json:"FechaCreacion"`
+	FechaModificacion string `json:"FechaModificacion"`
+}
+
+type CheckPazSalvoGrado struct {
+	PazSalvo     PazSalvoGrado            `json:"PazSalvo"`
+	EstadoActual HistorialPazSalvoGrado   `json:"EstadoActual"`
+	Historial    []HistorialPazSalvoGrado `json:"Historial"`
+}
+
+type PazSalvosSolicitudGrado struct {
+	Solicitud  SolicitudGrado           `json:"Solicitud"`
+	Estudiante *EstudianteRevisionGrado `json:"Estudiante,omitempty"`
+	Programa   string                   `json:"Programa"`
+	Periodo    string                   `json:"Periodo"`
+	Checks     []CheckPazSalvoGrado     `json:"Checks"`
+	Soportes   []SoporteBorradorGrado   `json:"Soportes"`
+}
+
+type PaginaPazSalvosGrado struct {
+	Solicitudes      []PazSalvosSolicitudGrado `json:"Solicitudes"`
+	Total            int                       `json:"Total"`
+	TipoGestionado   string                    `json:"TipoGestionado"`
+	TipoGestionadoId int                       `json:"TipoGestionadoId"`
+}
+
+type SolicitudAprobadaSecretariaGrado struct {
+	SolicitudId         int       `json:"SolicitudId"`
+	TerceroId           int       `json:"TerceroId"`
+	CodigoEstudiante    string    `json:"CodigoEstudiante"`
+	PeriodoId           int       `json:"PeriodoId"`
+	ProgramaAcademicoId int       `json:"ProgramaAcademicoId"`
+	DependenciaOikosId  int       `json:"DependenciaOikosId"`
+	FechaAprobacion     time.Time `json:"FechaAprobacion"`
+}
+
+type PaginaAprobadosSecretariaGrado struct {
+	Solicitudes []SolicitudAprobadaSecretariaGrado `json:"Solicitudes"`
+	Total       int                                `json:"Total"`
+}
+
+type OpcionFiltroPazSalvoGrado struct {
+	Id     int    `json:"Id"`
+	Nombre string `json:"Nombre"`
+}
+
+type ProgramaFiltroPazSalvoGrado struct {
+	Id            int    `json:"Id"`
+	Nombre        string `json:"Nombre"`
+	DependenciaId int    `json:"DependenciaId"`
+	FacultadId    int    `json:"FacultadId"`
+}
+
+type FiltrosPazSalvoGrado struct {
+	Periodos   []OpcionFiltroPazSalvoGrado   `json:"Periodos"`
+	Facultades []OpcionFiltroPazSalvoGrado   `json:"Facultades"`
+	Programas  []ProgramaFiltroPazSalvoGrado `json:"Programas"`
+}
+
+type UsuarioPazSalvoGrado struct {
+	NombreCompleto string                     `json:"NombreCompleto"`
+	Facultad       *OpcionFiltroPazSalvoGrado `json:"Facultad,omitempty"`
+}
+
+type AreaCargoLaboratoriosGrado struct {
+	Id                int    `json:"Id"`
+	Nombre            string `json:"Nombre"`
+	CodigoAbreviacion string `json:"CodigoAbreviacion"`
+	Activo            bool   `json:"Activo"`
+}
+
+type TipoCargoLaboratoriosGrado struct {
+	Id                int                        `json:"Id"`
+	Nombre            string                     `json:"Nombre"`
+	CodigoAbreviacion string                     `json:"CodigoAbreviacion"`
+	Activo            bool                       `json:"Activo"`
+	AreaTipoId        AreaCargoLaboratoriosGrado `json:"AreaTipoId"`
+}
+
+type CargoLaboratoriosGrado struct {
+	Id                int    `json:"Id"`
+	CodigoAbreviacion string `json:"CodigoAbreviacion"`
+	Activo            bool   `json:"Activo"`
+	TipoParametroId   struct {
+		Id                int    `json:"Id"`
+		CodigoAbreviacion string `json:"CodigoAbreviacion"`
+		Activo            bool   `json:"Activo"`
+	} `json:"TipoParametroId"`
+}
+
+type VinculacionLaboratoriosGrado struct {
+	Id                     int       `json:"Id"`
+	TipoVinculacionId      int       `json:"TipoVinculacionId"`
+	CargoId                int       `json:"CargoId"`
+	DependenciaId          int       `json:"DependenciaId"`
+	FechaInicioVinculacion time.Time `json:"FechaInicioVinculacion"`
+	FechaFinVinculacion    time.Time `json:"FechaFinVinculacion"`
+	Activo                 bool      `json:"Activo"`
+	TerceroPrincipalId     struct {
+		Id int `json:"Id"`
+	} `json:"TerceroPrincipalId"`
+}
+
+type DecidirPazSalvoGrado struct {
+	Estado        string `json:"Estado"`
+	Justificacion string `json:"Justificacion"`
+	Perfil        string `json:"Perfil"`
+}

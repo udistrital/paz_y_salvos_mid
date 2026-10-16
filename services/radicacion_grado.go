@@ -153,8 +153,11 @@ func RadicarGrado(ctx context.Context, auth string, id int, entrada models.Radic
 	if err != nil {
 		return nil, err
 	}
-	tipos := make([]int, 0, len(tiposSoporteGrado))
-	documentos := make(map[int]bool, len(tiposSoporteGrado))
+	if len(borrador.Soportes) == 0 {
+		return nil, falloGrado(400, "Carga los soportes necesarios antes de radicar")
+	}
+	tipos := make([]int, 0, len(borrador.Soportes))
+	documentos := make(map[int]bool, len(borrador.Soportes))
 	for _, definicion := range tiposSoporteGrado {
 		tipo, err := resolverParametroGrado(user.Ctx, "TIP_SOP_GRADO", definicion.Codigo)
 		if err != nil {
@@ -170,9 +173,6 @@ func RadicarGrado(ctx context.Context, auth string, id int, entrada models.Radic
 			}
 		}
 		if soporte == nil {
-			if definicion.Obligatorio {
-				return nil, falloGrado(400, "Carga todos los soportes obligatorios antes de radicar")
-			}
 			continue
 		}
 		if documentos[soporte.DocumentoId] {

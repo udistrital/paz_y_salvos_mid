@@ -1,14 +1,8 @@
-swagger: "2.0"
+swagger: '2.0'
 info:
-  title: beego Test API
-  description: beego has a very cool tools to autogenerate documents for your API
+  title: Paz y Salvos MID
+  description: Orquestación de solicitudes, revisiones y checks de Grados
   version: 1.0.0
-  termsOfService: http://beego.me/
-  contact:
-    email: astaxie@gmail.com
-  license:
-    name: Apache 2.0
-    url: http://www.apache.org/licenses/LICENSE-2.0.html
 basePath: /v1
 paths:
   /semaforo/:
@@ -53,14 +47,14 @@ paths:
         type: integer
         format: int64
       responses:
-        "200":
-          description: ""
+        '200':
+          description: ''
           schema:
             type: array
             items:
               $ref: '#/definitions/models.SemaforoTable'
-        "503":
-          description: ""
+        '503':
+          description: ''
   /semaforo/asistente_proyecto/{cedula}:
     get:
       tags:
@@ -103,17 +97,17 @@ paths:
         type: integer
         format: int64
       responses:
-        "200":
-          description: ""
+        '200':
+          description: ''
           schema:
             type: array
             items:
               $ref: '#/definitions/models.SemaforoTable'
-        "400":
+        '400':
           description: '{object} models.APIResponse "Parámetro ''cedula'' es obligatorio"'
-        "404":
+        '404':
           description: '{object} models.APIResponse "No se encontraron proyectos asignados"'
-        "503":
+        '503':
           description: '{object} models.APIResponse "Error al consultar el servicio externo"'
   /semaforo/estudiante/{codigo}:
     get:
@@ -139,17 +133,17 @@ paths:
         type: integer
         format: int64
       responses:
-        "200":
-          description: ""
+        '200':
+          description: ''
           schema:
             type: array
             items:
               $ref: '#/definitions/models.SemaforoTable'
-        "400":
+        '400':
           description: '{object} models.APIResponse "Parámetro ''codigo'' es obligatorio"'
-        "404":
+        '404':
           description: '{object} models.APIResponse "Estudiante no encontrado"'
-        "503":
+        '503':
           description: '{object} models.APIResponse "Error al consultar el servicio externo"'
   /semaforo/facultad/{id_secretario}:
     get:
@@ -194,13 +188,13 @@ paths:
         type: integer
         format: int64
       responses:
-        "200":
-          description: ""
+        '200':
+          description: ''
           schema:
             type: array
             items:
               $ref: '#/definitions/models.SemaforoTable'
-        "400":
+        '400':
           description: :id_secretario is empty
   /semaforo/laboratorios/{id_coordinador_lab}:
     get:
@@ -245,13 +239,13 @@ paths:
         type: integer
         format: int64
       responses:
-        "200":
-          description: ""
+        '200':
+          description: ''
           schema:
             type: array
             items:
               $ref: '#/definitions/models.SemaforoTable'
-        "400":
+        '400':
           description: :id_coordinador_lab is empty
   /semaforo/proyecto/{id_coordinador}:
     get:
@@ -296,12 +290,1564 @@ paths:
         type: integer
         format: int64
       responses:
-        "200":
-          description: ""
+        '200':
+          description: ''
           schema:
             $ref: '#/definitions/models.SemaforoCoordinadorResponse'
-        "400":
+        '400':
           description: :id_coordinador is empty
+  /solicitud-grado/paz-salvos/aprobados:
+    get:
+      tags:
+      - diplomas
+      summary: Lista por periodo las solicitudes cuyo check final de Secretaría está aprobado.
+      description: Lista por periodo las solicitudes cuyo check final de Secretaría está aprobado.
+      operationId: InscripcionGradoController.ListarAprobadosSecretaria
+      produces:
+      - application/json
+      parameters:
+      - in: query
+        name: periodo_id
+        required: true
+        type: integer
+        format: int64
+        description: Periodo académico positivo
+      - in: query
+        name: limit
+        required: false
+        type: integer
+        format: int64
+        description: 1 a 100, predeterminado 20
+      - in: query
+        name: offset
+        required: false
+        type: integer
+        format: int64
+        description: Predeterminado 0
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            $ref: '#/definitions/grado.RespuestaAprobados'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+  /solicitud-grado/paz-salvos:
+    get:
+      tags:
+      - paz-salvos-grado
+      summary: Lista expedientes con ocho checks dentro del ámbito del perfil autenticado.
+      description: Lista expedientes con ocho checks dentro del ámbito del perfil autenticado.
+      operationId: InscripcionGradoController.ListarPazSalvos
+      produces:
+      - application/json
+      parameters:
+      - in: query
+        name: perfil
+        required: true
+        type: string
+        description: Perfil acreditado en la sesión
+      - in: query
+        name: tipo
+        required: false
+        type: string
+      - in: query
+        name: limit
+        required: false
+        type: integer
+        format: int64
+      - in: query
+        name: offset
+        required: false
+        type: integer
+        format: int64
+      - in: query
+        name: periodo_id
+        required: false
+        type: integer
+        format: int64
+      - in: query
+        name: programa_id
+        required: false
+        type: integer
+        format: int64
+      - in: query
+        name: facultad_id
+        required: false
+        type: integer
+        format: int64
+      - in: query
+        name: codigo
+        required: false
+        type: string
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: &id001
+                type: boolean
+              Status: &id002
+                type: integer
+                format: int64
+              Message: &id003
+                type: string
+              Data:
+                $ref: '#/definitions/grado.PaginaPazSalvos'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+      security:
+      - BearerAuth: []
+  /solicitud-grado/paz-salvos/usuario:
+    get:
+      tags:
+      - paz-salvos-grado
+      summary: Consulta la identidad y facultad del usuario del semáforo.
+      description: Consulta la identidad y facultad del usuario del semáforo.
+      operationId: InscripcionGradoController.UsuarioPazSalvos
+      produces:
+      - application/json
+      parameters:
+      - in: query
+        name: perfil
+        required: true
+        type: string
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.UsuarioPazSalvos'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+      security:
+      - BearerAuth: []
+  /solicitud-grado/paz-salvos/filtros:
+    get:
+      tags:
+      - paz-salvos-grado
+      summary: Consulta periodos, facultades y programas del perfil autenticado.
+      description: Consulta periodos, facultades y programas del perfil autenticado.
+      operationId: InscripcionGradoController.FiltrosPazSalvos
+      produces:
+      - application/json
+      parameters:
+      - in: query
+        name: perfil
+        required: true
+        type: string
+      - in: query
+        name: tipo
+        required: false
+        type: string
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.FiltrosPazSalvos'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+      security:
+      - BearerAuth: []
+  /solicitud-grado/{id}/paz-salvos:
+    get:
+      tags:
+      - paz-salvos-grado
+      summary: Consulta los ocho checks y sus historiales de una solicitud autorizada.
+      description: Consulta los ocho checks y sus historiales de una solicitud autorizada.
+      operationId: InscripcionGradoController.ConsultarPazSalvos
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: query
+        name: perfil
+        required: true
+        type: string
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.PazSalvosSolicitud'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      security:
+      - BearerAuth: []
+  /solicitud-grado/{id}/paz-salvos/{tipo}:
+    post:
+      tags:
+      - paz-salvos-grado
+      summary: Registra una decisión del check gestionado por el perfil autenticado.
+      description: Registra una decisión del check gestionado por el perfil autenticado.
+      operationId: InscripcionGradoController.DecidirPazSalvo
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: path
+        name: tipo
+        required: true
+        type: string
+        description: Código de soporte o check
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/grado.DecidirCheck'
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.PazSalvosSolicitud'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      consumes:
+      - application/json
+      security:
+      - BearerAuth: []
+  /solicitud-grado/{id}/paz-salvos/soportes/{tipo}:
+    get:
+      tags:
+      - paz-salvos-grado
+      summary: Obtiene el PDF vigente dentro del ámbito del check.
+      description: Obtiene el PDF vigente dentro del ámbito del check.
+      operationId: InscripcionGradoController.DescargarSoportePazSalvo
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: path
+        name: tipo
+        required: true
+        type: string
+        description: Código de soporte o check
+      - in: query
+        name: perfil
+        required: true
+        type: string
+      - in: query
+        name: tipo_check
+        required: true
+        type: string
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.ArchivoPDF'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      security:
+      - BearerAuth: []
+  /solicitud-grado/revision/filtros:
+    get:
+      tags:
+      - revision-grado
+      summary: Consulta los periodos y programas autorizados a Secretaría.
+      description: Consulta los periodos y programas autorizados a Secretaría.
+      operationId: InscripcionGradoController.FiltrosRevisionDocumental
+      produces:
+      - application/json
+      parameters: []
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.FiltrosRevision'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+      security:
+      - BearerAuth: []
+  /solicitud-grado/revision:
+    get:
+      tags:
+      - revision-grado
+      summary: Lista borradores y entregas de las facultades de Secretaría.
+      description: Lista borradores y entregas de las facultades de Secretaría.
+      operationId: InscripcionGradoController.ListarRevisionDocumental
+      produces:
+      - application/json
+      parameters:
+      - in: query
+        name: limit
+        required: false
+        type: integer
+        format: int64
+      - in: query
+        name: offset
+        required: false
+        type: integer
+        format: int64
+      - in: query
+        name: periodo_id
+        required: false
+        type: integer
+        format: int64
+      - in: query
+        name: programa_id
+        required: false
+        type: integer
+        format: int64
+      - in: query
+        name: estado
+        required: false
+        type: string
+      - in: query
+        name: texto
+        required: false
+        type: string
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.PaginaRevision'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+      security:
+      - BearerAuth: []
+  /solicitud-grado/revision/{id}:
+    get:
+      tags:
+      - revision-grado
+      summary: Consulta el formulario y los soportes de una solicitud de la facultad.
+      description: Consulta el formulario y los soportes de una solicitud de la facultad.
+      operationId: InscripcionGradoController.ConsultarRevisionDocumental
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.SolicitudRevision'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      security:
+      - BearerAuth: []
+    post:
+      tags:
+      - revision-grado
+      summary: Observa o aprueba los PDF de la versión radicada vigente.
+      description: Observa o aprueba los PDF de la versión radicada vigente.
+      operationId: InscripcionGradoController.RevisarDocumentacion
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/grado.RevisarDocumentacion'
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.SolicitudRevision'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      consumes:
+      - application/json
+      security:
+      - BearerAuth: []
+  /solicitud-grado/revision/{id}/versiones:
+    get:
+      tags:
+      - versiones-grado
+      summary: Lista las entregas radicadas visibles para Secretaría.
+      description: Lista las entregas radicadas visibles para Secretaría.
+      operationId: InscripcionGradoController.ListarVersionesSecretaria
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                type: array
+                items:
+                  $ref: '#/definitions/grado.ResumenVersion'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      security:
+      - BearerAuth: []
+  /solicitud-grado/revision/{id}/versiones/{numero}:
+    get:
+      tags:
+      - versiones-grado
+      summary: Consulta una entrega radicada anterior en el ámbito de Secretaría.
+      description: Consulta una entrega radicada anterior en el ámbito de Secretaría.
+      operationId: InscripcionGradoController.ConsultarVersionSecretaria
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: path
+        name: numero
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.DetalleVersion'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      security:
+      - BearerAuth: []
+  /solicitud-grado/revision/{id}/versiones/{numero}/soportes/{tipo}:
+    get:
+      tags:
+      - versiones-grado
+      summary: Obtiene el PDF de una entrega histórica autorizada a Secretaría.
+      description: Obtiene el PDF de una entrega histórica autorizada a Secretaría.
+      operationId: InscripcionGradoController.DescargarVersionSecretaria
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: path
+        name: numero
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: path
+        name: tipo
+        required: true
+        type: string
+        description: Código de soporte o check
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.ArchivoPDF'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      security:
+      - BearerAuth: []
+  /solicitud-grado/revision/{id}/soportes/{tipo}:
+    get:
+      tags:
+      - revision-grado
+      summary: Obtiene un PDF vigente para revisión de Secretaría.
+      description: Obtiene un PDF vigente para revisión de Secretaría.
+      operationId: InscripcionGradoController.DescargarSoporteRevision
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: path
+        name: tipo
+        required: true
+        type: string
+        description: Código de soporte o check
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.ArchivoPDF'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      security:
+      - BearerAuth: []
+  /solicitud-grado/borrador/{id}/radicar:
+    post:
+      tags:
+      - inscripcion-grado
+      summary: Radica el formulario y los PDF de la versión vigente dentro de INSC_GRADO o APROB_PAZ_SALVO.
+      description: Radica el formulario y los PDF de la versión vigente dentro de INSC_GRADO o APROB_PAZ_SALVO.
+      operationId: InscripcionGradoController.Radicar
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/grado.Radicar'
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.Borrador'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      consumes:
+      - application/json
+      security:
+      - BearerAuth: []
+  /solicitud-grado/borrador/{id}/subsanar:
+    post:
+      tags:
+      - inscripcion-grado
+      summary: Crea una nueva versión editable desde la entrega observada.
+      description: Crea una nueva versión editable desde la entrega observada.
+      operationId: InscripcionGradoController.Subsanar
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/grado.Subsanar'
+      responses:
+        '201':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.Borrador'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      consumes:
+      - application/json
+      security:
+      - BearerAuth: []
+  /solicitud-grado/borrador/{id}/soportes:
+    get:
+      tags:
+      - inscripcion-grado
+      summary: Lista los PDF provisionales del borrador propio.
+      description: Lista los PDF provisionales del borrador propio.
+      operationId: InscripcionGradoController.ListarSoportes
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: query
+        name: tercero_id
+        required: true
+        type: integer
+        format: int64
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                type: array
+                items:
+                  $ref: '#/definitions/grado.Soporte'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      security:
+      - BearerAuth: []
+  /solicitud-grado/borrador/{id}/versiones:
+    get:
+      tags:
+      - versiones-grado
+      summary: Lista las entregas radicadas del estudiante titular.
+      description: Lista las entregas radicadas del estudiante titular.
+      operationId: InscripcionGradoController.ListarVersionesEstudiante
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                type: array
+                items:
+                  $ref: '#/definitions/grado.ResumenVersion'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      security:
+      - BearerAuth: []
+  /solicitud-grado/borrador/{id}/versiones/{numero}:
+    get:
+      tags:
+      - versiones-grado
+      summary: Consulta una entrega radicada anterior del estudiante titular.
+      description: Consulta una entrega radicada anterior del estudiante titular.
+      operationId: InscripcionGradoController.ConsultarVersionEstudiante
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: path
+        name: numero
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.DetalleVersion'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      security:
+      - BearerAuth: []
+  /solicitud-grado/borrador/{id}/versiones/{numero}/soportes/{tipo}:
+    get:
+      tags:
+      - versiones-grado
+      summary: Obtiene el PDF de una entrega histórica del titular.
+      description: Obtiene el PDF de una entrega histórica del titular.
+      operationId: InscripcionGradoController.DescargarVersionEstudiante
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: path
+        name: numero
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: path
+        name: tipo
+        required: true
+        type: string
+        description: Código de soporte o check
+      - in: query
+        name: tercero_id
+        required: true
+        type: integer
+        format: int64
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.ArchivoPDF'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      security:
+      - BearerAuth: []
+  /solicitud-grado/borrador/{id}/soportes/{tipo}:
+    put:
+      tags:
+      - inscripcion-grado
+      summary: Carga o reemplaza un PDF provisional del borrador propio.
+      description: Carga o reemplaza un PDF provisional del borrador propio.
+      operationId: InscripcionGradoController.CargarSoporte
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: path
+        name: tipo
+        required: true
+        type: string
+        description: Código de soporte o check
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/grado.CargarSoporte'
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.Soporte'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+        '413':
+          description: PDF superior a 5 MiB
+      consumes:
+      - application/json
+      security:
+      - BearerAuth: []
+    get:
+      tags:
+      - inscripcion-grado
+      summary: Obtiene un PDF provisional del borrador propio.
+      description: Obtiene un PDF provisional del borrador propio.
+      operationId: InscripcionGradoController.DescargarSoporte
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: path
+        name: tipo
+        required: true
+        type: string
+        description: Código de soporte o check
+      - in: query
+        name: tercero_id
+        required: true
+        type: integer
+        format: int64
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.ArchivoPDF'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      security:
+      - BearerAuth: []
+    delete:
+      tags:
+      - inscripcion-grado
+      summary: Desactiva un soporte provisional manteniendo su historial.
+      description: Desactiva un soporte provisional manteniendo su historial.
+      operationId: InscripcionGradoController.EliminarSoporte
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: path
+        name: tipo
+        required: true
+        type: string
+        description: Código de soporte o check
+      - in: query
+        name: tercero_id
+        required: true
+        type: integer
+        format: int64
+      - in: query
+        name: formulario_id
+        required: true
+        type: integer
+        format: int64
+      - in: query
+        name: soporte_actual_id
+        required: true
+        type: integer
+        format: int64
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.SoporteEliminado'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      security:
+      - BearerAuth: []
+  /solicitud-grado/directores:
+    get:
+      tags:
+      - catalogos-grado
+      summary: Consulta directores docentes activos para el estudiante.
+      description: Consulta directores docentes activos para el estudiante.
+      operationId: InscripcionGradoController.ListarDirectores
+      produces:
+      - application/json
+      parameters:
+      - in: query
+        name: tercero_id
+        required: true
+        type: integer
+        format: int64
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                type: array
+                items:
+                  $ref: '#/definitions/grado.Director'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+      security:
+      - BearerAuth: []
+  /solicitud-grado/modalidades:
+    get:
+      tags:
+      - catalogos-grado
+      summary: Consulta modalidades de grado activas del catálogo MOD_TRG.
+      description: Consulta modalidades de grado activas del catálogo MOD_TRG.
+      operationId: InscripcionGradoController.ListarModalidades
+      produces:
+      - application/json
+      parameters:
+      - in: query
+        name: tercero_id
+        required: true
+        type: integer
+        format: int64
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                type: array
+                items:
+                  $ref: '#/definitions/grado.Modalidad'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+      security:
+      - BearerAuth: []
+  /solicitud-grado/paises-expedicion:
+    get:
+      tags:
+      - catalogos-grado
+      summary: Consulta países para el lugar de expedición.
+      description: Consulta países para el lugar de expedición.
+      operationId: InscripcionGradoController.ListarPaisesExpedicion
+      produces:
+      - application/json
+      parameters:
+      - in: query
+        name: tercero_id
+        required: true
+        type: integer
+        format: int64
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                type: array
+                items:
+                  $ref: '#/definitions/grado.Pais'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+      security:
+      - BearerAuth: []
+  /solicitud-grado/departamentos-expedicion:
+    get:
+      tags:
+      - catalogos-grado
+      summary: Consulta departamentos o estados de un país.
+      description: Consulta departamentos o estados de un país.
+      operationId: InscripcionGradoController.ListarDepartamentosExpedicion
+      produces:
+      - application/json
+      parameters:
+      - in: query
+        name: tercero_id
+        required: true
+        type: integer
+        format: int64
+      - in: query
+        name: pais_id
+        required: true
+        type: integer
+        format: int64
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                type: array
+                items:
+                  $ref: '#/definitions/grado.Departamento'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+      security:
+      - BearerAuth: []
+  /solicitud-grado/lugares-expedicion:
+    get:
+      tags:
+      - catalogos-grado
+      summary: Consulta ciudades de un país y departamento.
+      description: Consulta ciudades de un país y departamento.
+      operationId: InscripcionGradoController.ListarLugaresExpedicion
+      produces:
+      - application/json
+      parameters:
+      - in: query
+        name: tercero_id
+        required: true
+        type: integer
+        format: int64
+      - in: query
+        name: pais_id
+        required: true
+        type: integer
+        format: int64
+      - in: query
+        name: departamento_id
+        required: true
+        type: integer
+        format: int64
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                type: array
+                items:
+                  $ref: '#/definitions/grado.Lugar'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+      security:
+      - BearerAuth: []
+  /solicitud-grado/lugares-expedicion/{id}:
+    get:
+      tags:
+      - catalogos-grado
+      summary: Valida una ciudad de expedición por ID.
+      description: Valida una ciudad de expedición por ID.
+      operationId: InscripcionGradoController.ObtenerLugarExpedicion
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: query
+        name: tercero_id
+        required: true
+        type: integer
+        format: int64
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.Lugar'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      security:
+      - BearerAuth: []
+  /solicitud-grado/lugar-expedicion-identificacion:
+    get:
+      tags:
+      - catalogos-grado
+      summary: Consulta la ciudad de expedición de la identificación del estudiante.
+      description: Consulta la ciudad de expedición de la identificación del estudiante.
+      operationId: InscripcionGradoController.ObtenerLugarExpedicionIdentificacion
+      produces:
+      - application/json
+      parameters:
+      - in: query
+        name: tercero_id
+        required: true
+        type: integer
+        format: int64
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.LugarIdentificacion'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+      security:
+      - BearerAuth: []
+  /solicitud-grado/borrador:
+    post:
+      tags:
+      - inscripcion-grado
+      summary: Crea el borrador del estudiante en su periodo y programa verificados.
+      description: Crea el borrador del estudiante en su periodo y programa verificados.
+      operationId: InscripcionGradoController.CrearBorrador
+      produces:
+      - application/json
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/grado.CrearBorrador'
+      responses:
+        '201':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.Borrador'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+      consumes:
+      - application/json
+      security:
+      - BearerAuth: []
+    get:
+      tags:
+      - inscripcion-grado
+      summary: Consulta la solicitud vigente propia por periodo y programa.
+      description: Consulta la solicitud vigente propia por periodo y programa.
+      operationId: InscripcionGradoController.ObtenerBorrador
+      produces:
+      - application/json
+      parameters:
+      - in: query
+        name: tercero_id
+        required: true
+        type: integer
+        format: int64
+      - in: query
+        name: periodo_id
+        required: true
+        type: integer
+        format: int64
+      - in: query
+        name: programa_id
+        required: true
+        type: integer
+        format: int64
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.Borrador'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+      security:
+      - BearerAuth: []
+  /solicitud-grado/borrador/{id}:
+    put:
+      tags:
+      - inscripcion-grado
+      summary: Actualiza el contenido editable del borrador propio.
+      description: Actualiza el contenido editable del borrador propio.
+      operationId: InscripcionGradoController.GuardarBorrador
+      produces:
+      - application/json
+      parameters:
+      - in: path
+        name: id
+        required: true
+        type: integer
+        description: Identificador de solicitud/entrega
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/grado.GuardarBorrador'
+      responses:
+        '200':
+          description: Respuesta exitosa
+          schema:
+            type: object
+            properties:
+              Success: *id001
+              Status: *id002
+              Message: *id003
+              Data:
+                $ref: '#/definitions/grado.Borrador'
+        '400':
+          description: Solicitud o filtros inválidos
+        '503':
+          description: Servicio institucional no disponible
+        '401':
+          description: Sesión ausente o no verificable
+        '403':
+          description: Perfil, identidad o ámbito no autorizado
+        '404':
+          description: Solicitud o entrega no encontrada
+        '409':
+          description: Estado o versión en conflicto
+      consumes:
+      - application/json
+      security:
+      - BearerAuth: []
 definitions:
   models.ProyectoAsignado:
     title: ProyectoAsignado
@@ -382,7 +1928,437 @@ definitions:
         format: double
       Urelinter:
         type: boolean
+  grado.Respuesta:
+    type: object
+    properties:
+      Success: *id001
+      Status: *id002
+      Message: *id003
+      Data:
+        type: object
+        description: Contenido según la operación
+    required:
+    - Success
+    - Status
+  grado.RespuestaAprobados:
+    type: object
+    properties:
+      Success: *id001
+      Status: *id002
+      Message: *id003
+      Data:
+        $ref: '#/definitions/grado.PaginaAprobadosSecretaria'
+    required:
+    - Success
+    - Status
+    - Data
+  grado.SolicitudAprobadaSecretaria:
+    type: object
+    properties:
+      SolicitudId: *id002
+      TerceroId: *id002
+      CodigoEstudiante: *id003
+      PeriodoId: *id002
+      ProgramaAcademicoId: *id002
+      DependenciaOikosId: *id002
+      FechaAprobacion:
+        type: string
+        format: date-time
+  grado.PaginaAprobadosSecretaria:
+    type: object
+    properties:
+      Solicitudes:
+        type: array
+        items:
+          $ref: '#/definitions/grado.SolicitudAprobadaSecretaria'
+      Total: *id002
+  grado.Solicitud: &id004
+    type: object
+    properties:
+      Id: *id002
+      TerceroId: *id002
+      CodigoEstudiante: *id003
+      PeriodoId: *id002
+      ProgramaAcademicoId: *id002
+      DependenciaOikosId: *id002
+  grado.Soporte: &id007
+    type: object
+    properties:
+      Id: *id002
+      FormularioId: *id002
+      TipoSoporte: *id003
+      DocumentoId: *id002
+      Nombre: *id003
+  grado.Formulario: &id005
+    type: object
+    properties:
+      Id: *id002
+      Version: *id002
+      Contenido: &id006
+        type: object
+        additionalProperties: true
+      FechaRadicacion:
+        type: string
+        format: date-time
+        x-nullable: true
+  grado.ResumenVersion:
+    type: object
+    properties:
+      FormularioId: *id002
+      Version: *id002
+      FechaRadicacion: *id003
+      EstadoSolicitudId: *id002
+      Justificacion: *id003
+  grado.DetalleVersion:
+    type: object
+    properties:
+      Solicitud: *id004
+      Formulario: *id005
+      Historial:
+        type: array
+        items: *id006
+      Soportes:
+        type: array
+        items: *id006
+  grado.Borrador:
+    type: object
+    properties:
+      Solicitud: *id004
+      Formulario: *id005
+      Soportes:
+        type: array
+        items: *id007
+      Estado: *id003
+  grado.Check: &id009
+    type: object
+    properties:
+      PazSalvo:
+        type: object
+        properties:
+          TipoCodigo: *id003
+          TipoPazSalvoId: *id002
+      EstadoActual: &id008
+        type: object
+        properties:
+          EstadoCodigo: *id003
+          Justificacion: *id003
+          FechaCreacion: *id003
+      Historial:
+        type: array
+        items: *id008
+  grado.PazSalvosSolicitud:
+    type: object
+    properties:
+      Solicitud: *id004
+      Checks:
+        type: array
+        items: *id009
+  grado.PaginaPazSalvos:
+    type: object
+    properties:
+      Solicitudes:
+        type: array
+        items:
+          $ref: '#/definitions/grado.PazSalvosSolicitud'
+      Total: *id002
+      TipoGestionado: *id003
+  grado.PaginaRevision:
+    type: object
+    properties:
+      Solicitudes:
+        type: array
+        items:
+          $ref: '#/definitions/grado.SolicitudRevision'
+      Total: *id002
+  grado.ArchivoPDF:
+    type: object
+    properties:
+      Nombre: *id003
+      MimeType:
+        type: string
+        enum:
+        - application/pdf
+      Archivo:
+        type: string
+        format: byte
+  grado.CrearBorrador:
+    type: object
+    properties:
+      TerceroId: *id002
+      PeriodoId: *id002
+      ProgramaAcademicoId: *id002
+      Contenido: *id006
+    required:
+    - TerceroId
+    - PeriodoId
+    - ProgramaAcademicoId
+    - Contenido
+  grado.GuardarBorrador:
+    type: object
+    properties:
+      TerceroId: *id002
+      Contenido: *id006
+    required:
+    - TerceroId
+    - Contenido
+  grado.CargarSoporte:
+    type: object
+    properties:
+      TerceroId: *id002
+      FormularioId: *id002
+      SoporteActualId: *id002
+      Nombre: *id003
+      MimeType: *id003
+      Archivo:
+        type: string
+        format: byte
+    required:
+    - TerceroId
+    - FormularioId
+    - Nombre
+    - MimeType
+    - Archivo
+  grado.Radicar:
+    type: object
+    properties:
+      TerceroId: *id002
+      FormularioId: *id002
+      Contenido: *id006
+    required:
+    - TerceroId
+    - FormularioId
+    - Contenido
+  grado.Subsanar:
+    type: object
+    properties:
+      TerceroId: *id002
+      FormularioId: *id002
+    required:
+    - TerceroId
+    - FormularioId
+  grado.DecisionSoporte:
+    type: object
+    properties:
+      SoporteId: *id002
+      Observado: *id001
+      Observacion: *id003
+  grado.RevisarDocumentacion:
+    type: object
+    properties:
+      FormularioId: *id002
+      Aprobada: *id001
+      Justificacion: *id003
+      Soportes:
+        type: array
+        items:
+          $ref: '#/definitions/grado.DecisionSoporte'
+    required:
+    - FormularioId
+    - Aprobada
+    - Soportes
+  grado.DecidirCheck:
+    type: object
+    properties:
+      Estado:
+        type: string
+        enum:
+        - PS_PENDIENTE
+        - PS_APROBADO
+        - PS_DESAPROBADO
+      Justificacion: *id003
+      Perfil: *id003
+    required:
+    - Estado
+    - Perfil
+  grado.SoporteInterno:
+    type: object
+    properties:
+      FormularioId: *id002
+      SoporteActualId: *id002
+      DocumentoId: *id002
+      EstadoSoporteId: *id002
+  grado.CrearBorradorInterno:
+    type: object
+    properties:
+      TerceroId: *id002
+      CodigoEstudiante: *id003
+      PeriodoId: *id002
+      ProgramaAcademicoId: *id002
+      DependenciaOikosId: *id002
+      CalendarioEventoInscripcionId: *id002
+      CalendarioEventoAprobacionId: *id002
+      EstadoBorradorId: *id002
+      Contenido: *id006
+  grado.RadicarInterno:
+    type: object
+    properties:
+      FormularioId: *id002
+      Contenido: *id006
+      EstadoBorradorId: *id002
+      EstadoRadicadaId: *id002
+      EstadoSoportePendienteId: *id002
+      TiposSoporteId:
+        type: array
+        items: *id002
+  grado.SubsanarInterno:
+    type: object
+    properties:
+      FormularioId: *id002
+      EstadoObservadaId: *id002
+      EstadoBorradorId: *id002
+      EstadoSoportePendienteId: *id002
+  grado.DecisionSoporteInterna:
+    type: object
+    properties:
+      SoporteId: *id002
+      EstadoSoporteId: *id002
+      Observacion: *id003
+  grado.RevisionInterna:
+    type: object
+    properties:
+      FormularioId: *id002
+      TerceroId: *id002
+      Aprobada: *id001
+      Justificacion: *id003
+      EstadoRadicadaId: *id002
+      EstadoObservadaId: *id002
+      EstadoDocumentacionAprobadaId: *id002
+      EstadoSoporteObservadoId: *id002
+      EstadoSoporteAprobadoId: *id002
+      EstadoPazSalvoPendienteId: *id002
+      TiposPazSalvoId:
+        type: array
+        items: *id002
+      Soportes:
+        type: array
+        items:
+          $ref: '#/definitions/grado.DecisionSoporteInterna'
+  grado.DecisionCheckInterna:
+    type: object
+    properties:
+      TerceroId: *id002
+      TipoPazSalvoId: *id002
+      EstadoPazSalvoId: *id002
+      Justificacion: *id003
+      EstadoDocumentacionAprobadaId: *id002
+      EstadoPendienteId: *id002
+      EstadoAprobadoId: *id002
+      EstadoDesaprobadoId: *id002
+      TipoSecretariaId: *id002
+      TiposPreviosId:
+        type: array
+        items: *id002
+  grado.SoporteEliminado:
+    type: object
+    properties:
+      Id: *id002
+      FormularioId: *id002
+      TipoSoporte: *id003
+  grado.Director:
+    type: object
+    properties:
+      DIR_NRO_IDEN: *id003
+      DIR_NOMBRE: *id003
+      DIR_APELLIDO: *id003
+      DIR_ESTADO: *id003
+  grado.Modalidad:
+    type: object
+    properties:
+      Id: *id002
+      Nombre: *id003
+      CodigoAbreviacion: *id003
+      Activo: *id001
+  grado.OpcionFiltro:
+    type: object
+    properties:
+      Id: *id002
+      Nombre: *id003
+  grado.Pais:
+    type: object
+    properties:
+      Id: *id002
+      Nombre: *id003
+  grado.Departamento:
+    type: object
+    properties:
+      Id: *id002
+      Nombre: *id003
+      PaisId: *id002
+      PaisNombre: *id003
+  grado.Lugar:
+    type: object
+    properties:
+      Id: *id002
+      Nombre: *id003
+      DepartamentoId: *id002
+      DepartamentoNombre: *id003
+      PaisId: *id002
+      PaisNombre: *id003
+  grado.LugarIdentificacion:
+    type: object
+    properties:
+      Registrado: *id001
+      Lugar:
+        $ref: '#/definitions/grado.Lugar'
+  grado.FiltrosRevision:
+    type: object
+    properties:
+      Periodos:
+        type: array
+        items:
+          $ref: '#/definitions/grado.OpcionFiltro'
+      Programas:
+        type: array
+        items: *id006
+  grado.FiltrosPazSalvos:
+    type: object
+    properties:
+      Periodos:
+        type: array
+        items:
+          $ref: '#/definitions/grado.OpcionFiltro'
+      Facultades:
+        type: array
+        items:
+          $ref: '#/definitions/grado.OpcionFiltro'
+      Programas:
+        type: array
+        items: *id006
+  grado.UsuarioPazSalvos:
+    type: object
+    properties:
+      NombreCompleto: *id003
+      Facultad:
+        $ref: '#/definitions/grado.OpcionFiltro'
+  grado.SolicitudRevision:
+    type: object
+    properties:
+      Solicitud: *id004
+      Estudiante: *id006
+      Formulario: *id006
+      Estado: *id003
+      Version: *id002
+      Soportes:
+        type: array
+        items: *id007
 tags:
+- name: catalogos-grado
+  description: Operaciones de Grados
+- name: diplomas
+  description: Operaciones de Grados
+- name: inscripcion-grado
+  description: Operaciones de Grados
+- name: paz-salvos-grado
+  description: Operaciones de Grados
+- name: revision-grado
+  description: Operaciones de Grados
 - name: semaforo
-  description: |
-    SemaforoController operations for Semaforo
+  description: Semáforo institucional
+- name: versiones-grado
+  description: Operaciones de Grados
+securityDefinitions:
+  BearerAuth:
+    type: apiKey
+    name: Authorization
+    in: header
+    description: Bearer de la sesión institucional; no se requiere para Diplomas

@@ -31,21 +31,15 @@ type identificacionExpedicionGrado struct {
 }
 
 func identificacionAutenticadaGrado(user *estudianteGrado) (*identificacionExpedicionGrado, map[string]interface{}, error) {
-	endpoint, err := urlUserInfoGrado()
+	autorizacion, _ := user.Ctx.Value("Authorization").(string)
+	sesion, err := sesionAutenticadaGrado(user.Ctx, autorizacion)
 	if err != nil {
 		return nil, nil, err
 	}
-	var sesion usuarioInfoGrado
-	if _, err := request.GetWithContext(user.Ctx, endpoint, &sesion); err != nil {
-		return nil, nil, falloGrado(http.StatusUnauthorized, "No fue posible verificar la sesión")
-	}
-	sesion.Sub = strings.TrimSpace(sesion.Sub)
-	sesion.Documento = strings.TrimSpace(sesion.Documento)
-	usuarioContexto, _ := user.Ctx.Value("user").(string)
 	if err := validarLugarExpedicionTerceros.Struct(struct {
 		Sub       string `validate:"required"`
 		Documento string `validate:"required"`
-	}{Sub: sesion.Sub, Documento: sesion.Documento}); err != nil || sesion.Sub != strings.TrimSpace(usuarioContexto) {
+	}{Sub: sesion.Sub, Documento: sesion.Documento}); err != nil {
 		return nil, nil, falloGrado(http.StatusUnauthorized, "La identidad de la sesión no coincide")
 	}
 
@@ -53,13 +47,13 @@ func identificacionAutenticadaGrado(user *estudianteGrado) (*identificacionExped
 	if err != nil {
 		return nil, nil, err
 	}
-	q := url.Values{"query": {fmt.Sprintf("Activo:true,TerceroId.Id:%d,Numero:%s", user.TerceroID, sesion.Documento)}, "limit": {"100"}}
+	q := url.Values{"query": {fmt.Sprintf("Activo:true,TerceroId.Id:%d,Numero:%s", user.TerceroID, sesion.Documento)}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(user.Ctx, base+"datos_identificacion?"+q.Encode(), &raw); err != nil {
 		return nil, nil, falloGrado(http.StatusServiceUnavailable, "No se pudo consultar el lugar de expedición en Terceros")
 	}
 	registros, err := listaGrado[map[string]interface{}](raw)
-	if err != nil || len(registros) == 0 || len(registros) >= 100 {
+	if err != nil || len(registros) == 0 {
 		return nil, nil, falloGrado(http.StatusServiceUnavailable, "Datos de identificación ausentes o incompletos")
 	}
 
@@ -116,6 +110,9 @@ func RegistrarLugarExpedicionIdentificacionGrado(ctx context.Context, auth strin
 	}
 	user, err := resolverEstudiante(ctx, auth, entrada.TerceroId)
 	if err != nil {
+		return nil, err
+	}
+	if err := verificarVinculacionEstudianteGrado(user.Ctx, user.TerceroID); err != nil {
 		return nil, err
 	}
 	identificacion, original, err := identificacionAutenticadaGrado(user)

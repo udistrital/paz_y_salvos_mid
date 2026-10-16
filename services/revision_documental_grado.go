@@ -75,12 +75,36 @@ func urlUserInfoGrado() (string, error) {
 	return u.String(), nil
 }
 
+func sesionAutenticadaGrado(ctx context.Context, autorizacion string) (*usuarioInfoGrado, error) {
+	if !strings.HasPrefix(autorizacion, "Bearer ") || len(strings.TrimSpace(strings.TrimPrefix(autorizacion, "Bearer "))) < 10 {
+		return nil, falloGrado(http.StatusUnauthorized, "Sesión no autenticada")
+	}
+	usuarioContexto, ok := ctx.Value("user").(string)
+	if !ok || strings.TrimSpace(usuarioContexto) == "" {
+		return nil, falloGrado(http.StatusUnauthorized, "La sesión no es válida")
+	}
+	endpoint, err := urlUserInfoGrado()
+	if err != nil {
+		return nil, err
+	}
+	var usuario usuarioInfoGrado
+	if _, err := request.GetWithContext(ctx, endpoint, &usuario); err != nil {
+		return nil, falloGrado(http.StatusUnauthorized, "No fue posible verificar la sesión")
+	}
+	usuario.Sub = strings.TrimSpace(usuario.Sub)
+	usuario.Documento = strings.TrimSpace(usuario.Documento)
+	if usuario.Sub == "" || usuario.Sub != strings.TrimSpace(usuarioContexto) || usuario.Documento == "" || len(usuario.Role) == 0 {
+		return nil, falloGrado(http.StatusUnauthorized, "La identidad de la sesión no coincide")
+	}
+	return &usuario, nil
+}
+
 func terceroPorDocumentoGrado(ctx context.Context, documento string) (int, error) {
 	base, err := baseGrado("UrlTercerosCrud")
 	if err != nil {
 		return 0, err
 	}
-	q := url.Values{"query": {"Numero:" + documento + ",Activo:true"}, "limit": {"100"}}
+	q := url.Values{"query": {"Numero:" + documento + ",Activo:true"}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(ctx, base+"datos_identificacion?"+q.Encode(), &raw); err != nil {
 		return 0, falloGrado(http.StatusServiceUnavailable, "No se pudo verificar la identidad del funcionario")
@@ -151,29 +175,44 @@ func facultadesSecretariaGrado(ctx context.Context, documento string) ([]int, er
 }
 
 func dependenciasFacultadesGrado(ctx context.Context, facultades []int) ([]int, error) {
-	base, err := baseGrado("UrlcrudOikos")
+	return resolverDependenciasFacultadesGrado(ctx, facultades, false)
+}
+
+func dependenciasFacultadesGradoPermitiendoVacio(ctx context.Context, facultades []int) ([]int, error) {
+	return resolverDependenciasFacultadesGrado(ctx, facultades, true)
+}
+
+func resolverDependenciasFacultadesGrado(ctx context.Context, facultades []int, permitirVacio bool) ([]int, error) {
+	base, err := baseOikosGradoV2()
 	if err != nil {
 		return nil, err
 	}
 	dependencias := make(map[int]bool)
 	for _, facultad := range facultades {
-		q := url.Values{"query": {"Padre:" + strconv.Itoa(facultad)}, "limit": {"0"}}
+		q := url.Values{"query": {"PadreId.Id:" + strconv.Itoa(facultad) + ",Activo:true"}, "limit": {"0"}}
 		var raw json.RawMessage
 		if _, err := request.GetWithContext(ctx, base+"dependencia_padre/?"+q.Encode(), &raw); err != nil {
-			return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo resolver el alcance Oikos de Secretaría")
+			return nil, falloGrado(http.StatusServiceUnavailable, "No se pudo resolver el alcance Oikos de las facultades asignadas")
 		}
-		relaciones, err := listaGrado[models.DependenciaPadreOikos](raw)
+		if permitirVacio && strings.TrimSpace(string(raw)) == "null" {
+			continue
+		}
+		relaciones, err := listaGrado[models.DependenciaPadreOikosV2](raw)
 		if err != nil {
 			return nil, falloGrado(http.StatusServiceUnavailable, "Jerarquía Oikos no verificable")
 		}
 		for _, relacion := range relaciones {
-			if relacion.Padre.Id == facultad && relacion.Hija.Id > 0 {
-				dependencias[relacion.Hija.Id] = true
+			if relacion.Activo && relacion.PadreId.Id == facultad && relacion.PadreId.Activo &&
+				relacion.HijaId.Id > 0 && relacion.HijaId.Activo {
+				dependencias[relacion.HijaId.Id] = true
 			}
 		}
 	}
 	if len(dependencias) == 0 {
-		return nil, falloGrado(http.StatusForbidden, "Las facultades de Secretaría no tienen programas Oikos verificables")
+		if permitirVacio {
+			return []int{}, nil
+		}
+		return nil, falloGrado(http.StatusForbidden, "Las facultades asignadas no tienen programas Oikos verificables")
 	}
 	resultado := make([]int, 0, len(dependencias))
 	for id := range dependencias {
@@ -184,26 +223,10 @@ func dependenciasFacultadesGrado(ctx context.Context, facultades []int) ([]int, 
 }
 
 func resolverSecretariaGrado(ctx context.Context, autorizacion string) (*identidadSecretariaGrado, error) {
-	if !strings.HasPrefix(autorizacion, "Bearer ") || len(strings.TrimSpace(strings.TrimPrefix(autorizacion, "Bearer "))) < 10 {
-		return nil, falloGrado(http.StatusUnauthorized, "Sesión no autenticada")
-	}
-	usuarioContexto, ok := ctx.Value("user").(string)
-	if !ok || strings.TrimSpace(usuarioContexto) == "" {
-		return nil, falloGrado(http.StatusUnauthorized, "La sesión no es válida")
-	}
 	ctxAutenticado := ctxAutorizado(ctx, autorizacion)
-	endpoint, err := urlUserInfoGrado()
+	usuario, err := sesionAutenticadaGrado(ctxAutenticado, autorizacion)
 	if err != nil {
 		return nil, err
-	}
-	var usuario usuarioInfoGrado
-	if _, err := request.GetWithContext(ctxAutenticado, endpoint, &usuario); err != nil {
-		return nil, falloGrado(http.StatusUnauthorized, "No fue posible verificar la sesión")
-	}
-	usuario.Sub = strings.TrimSpace(usuario.Sub)
-	usuario.Documento = strings.TrimSpace(usuario.Documento)
-	if usuario.Sub == "" || usuario.Sub != strings.TrimSpace(usuarioContexto) || usuario.Documento == "" {
-		return nil, falloGrado(http.StatusUnauthorized, "La identidad de la sesión no coincide")
 	}
 	roles, err := rolesUsuarioGrado(usuario.Role)
 	if err != nil {
@@ -240,29 +263,42 @@ func estadosSolicitudRevisionGrado(ctx context.Context) (map[string]int, error) 
 	return resultado, nil
 }
 
-func validarVentanaRevisionSecretariaGrado(ctx context.Context, solicitud models.SolicitudGrado) error {
+func validarVentanaAprobacionPazSalvoGrado(ctx context.Context, solicitud models.SolicitudGrado) error {
+	if solicitud.CalendarioEventoAprobacionId <= 0 {
+		return falloGrado(http.StatusConflict, "La solicitud no tiene asociado el evento de aprobación de Paz y Salvos")
+	}
 	base, err := baseGrado("UrlProyectoAcademico")
 	if err != nil {
 		return err
 	}
-	q := url.Values{"query": {"Id:" + strconv.Itoa(solicitud.ProgramaAcademicoId) + ",Activo:true"}, "limit": {"100"}}
+	q := url.Values{"query": {"Id:" + strconv.Itoa(solicitud.ProgramaAcademicoId) + ",Activo:true"}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(ctx, base+"proyecto_academico_institucion?"+q.Encode(), &raw); err != nil {
 		return falloGrado(http.StatusServiceUnavailable, "No se pudo verificar el programa de la solicitud")
 	}
 	programas, err := listaGrado[programaGrado](raw)
 	if err != nil || len(programas) != 1 || programas[0].Id != solicitud.ProgramaAcademicoId ||
-		programas[0].DependenciaId != solicitud.DependenciaOikosId || !programas[0].Activo {
+		programas[0].DependenciaId != solicitud.DependenciaOikosId || !programas[0].Activo || strings.TrimSpace(programas[0].Nombre) == "" {
 		return falloGrado(http.StatusServiceUnavailable, "Programa de la solicitud ausente o ambiguo")
 	}
 	inscripcion, aprobacion, err := eventosGrado(ctx, &programas[0], solicitud.PeriodoId)
 	if err != nil {
 		return err
 	}
-	if inscripcion.EventoId != solicitud.CalendarioEventoInscripcionId || aprobacion.EventoId != solicitud.CalendarioEventoAprobacionId {
-		return falloGrado(http.StatusConflict, "La configuración de fechas cambió; la solicitud requiere revisión")
+	if aprobacion.EventoId != solicitud.CalendarioEventoAprobacionId {
+		return falloGrado(http.StatusConflict, "El evento de aprobación asociado a la solicitud no coincide con el calendario del periodo y programa")
 	}
-	return validarVentana(inscripcion, aprobacion, false)
+	if inscripcion.EventoId != solicitud.CalendarioEventoInscripcionId {
+		return falloGrado(http.StatusConflict, "La configuración de inscripción cambió; la solicitud requiere revisión")
+	}
+	if err := validarVentana(inscripcion, aprobacion, false); err != nil {
+		if fallo, ok := err.(*ErrorInscripcionGrado); ok && fallo.Status == http.StatusConflict &&
+			fallo.Mensaje == "Los tiempos de aprobación se han cerrado" {
+			return falloGrado(http.StatusConflict, "Los tiempos de aprobación para el programa académico "+strings.TrimSpace(programas[0].Nombre)+" se han cerrado")
+		}
+		return err
+	}
+	return nil
 }
 
 func idsEstadosRevisionGrado(estados map[string]int) []int {
@@ -386,7 +422,14 @@ func detalleRevisionCRUD(ctx context.Context, id, dependenciaID int, estados []i
 	var respuesta models.APIResponseData[models.BorradorGrado]
 	status, err := request.GetWithContext(ctx, base+"solicitud-grado/revision/"+strconv.Itoa(id)+"?"+q.Encode(), &respuesta)
 	if err != nil {
-		return nil, status, err
+		switch status {
+		case http.StatusNotFound:
+			return nil, status, falloGrado(http.StatusNotFound, "Solicitud no encontrada en el ámbito autorizado")
+		case http.StatusConflict:
+			return nil, status, falloGrado(http.StatusConflict, "La versión no admite revisión documental")
+		default:
+			return nil, status, falloGrado(http.StatusServiceUnavailable, "No se pudo consultar el expediente documental")
+		}
 	}
 	if status != http.StatusOK || !respuesta.Success || respuesta.Status != http.StatusOK || respuesta.Data.Solicitud.DependenciaOikosId != dependenciaID {
 		return nil, status, falloGrado(http.StatusServiceUnavailable, "Respuesta de expediente inválida")
@@ -641,7 +684,7 @@ func DescargarSoporteRevisionGrado(ctx context.Context, auth string, id int, cod
 }
 
 func RevisarDocumentacionSecretariaGrado(ctx context.Context, auth string, id int, entrada models.RevisarDocumentacionGrado) (*models.SolicitudRevisionGrado, error) {
-	if id <= 0 || entrada.FormularioId <= 0 || len(entrada.Soportes) < 3 || len(entrada.Soportes) > 4 {
+	if id <= 0 || entrada.FormularioId <= 0 || len(entrada.Soportes) == 0 {
 		return nil, falloGrado(http.StatusBadRequest, "Solicitud, versión y decisiones de soportes son obligatorias")
 	}
 	secretaria, err := resolverSecretariaGrado(ctx, auth)
@@ -660,7 +703,7 @@ func RevisarDocumentacionSecretariaGrado(ctx context.Context, auth string, id in
 		len(borrador.Soportes) != len(entrada.Soportes) {
 		return nil, falloGrado(http.StatusConflict, "La versión radicada cambió")
 	}
-	if err := validarVentanaRevisionSecretariaGrado(secretaria.Ctx, borrador.Solicitud); err != nil {
+	if err := validarVentanaAprobacionPazSalvoGrado(secretaria.Ctx, borrador.Solicitud); err != nil {
 		return nil, err
 	}
 	estadoObservado, err := resolverParametroGrado(secretaria.Ctx, "EST_SOP_GRADO", "SD_OBSERVADO")

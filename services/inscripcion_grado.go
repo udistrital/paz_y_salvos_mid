@@ -39,12 +39,14 @@ type estudianteGrado struct {
 
 type programaGrado struct {
 	Id               int         `json:"Id"`
+	Nombre           string      `json:"Nombre"`
 	DependenciaId    int         `json:"DependenciaId"`
 	Activo           bool        `json:"Activo"`
 	NivelFormacionId *nivelGrado `json:"NivelFormacionId"`
 }
 type nivelGrado struct {
 	Id                    int         `json:"Id"`
+	CodigoAbreviacion     string      `json:"CodigoAbreviacion"`
 	NivelFormacionPadreId *nivelGrado `json:"NivelFormacionPadreId"`
 }
 type calendarioGrado struct {
@@ -121,7 +123,19 @@ func resolverEstudiante(ctx context.Context, autorizacion string, terceroID int)
 	if terceroID <= 0 {
 		return nil, falloGrado(http.StatusBadRequest, "Tercero requerido")
 	}
-	return &estudianteGrado{TerceroID: terceroID, Ctx: ctxAutorizado(ctx, autorizacion)}, nil
+	ctxAutenticado := ctxAutorizado(ctx, autorizacion)
+	usuario, err := sesionAutenticadaGrado(ctxAutenticado, autorizacion)
+	if err != nil {
+		return nil, err
+	}
+	titular, err := terceroPorDocumentoGrado(ctxAutenticado, usuario.Documento)
+	if err != nil {
+		return nil, err
+	}
+	if terceroID != titular {
+		return nil, falloGrado(http.StatusForbidden, "El tercero solicitado no pertenece al estudiante autenticado")
+	}
+	return &estudianteGrado{TerceroID: titular, Ctx: ctxAutenticado}, nil
 }
 
 func resolverEstadoBorrador(ctx context.Context) (int, error) {
@@ -164,7 +178,7 @@ func resolverParametroGrado(ctx context.Context, tipoCodigo, codigo string) (int
 	if err != nil {
 		return 0, err
 	}
-	query := url.Values{"query": {"CodigoAbreviacion:" + codigo + ",Activo:true,TipoParametroId.CodigoAbreviacion:" + tipoCodigo + ",TipoParametroId.Activo:true,TipoParametroId.AreaTipoId.CodigoAbreviacion:PSGA,TipoParametroId.AreaTipoId.Activo:true"}, "limit": {"100"}}
+	query := url.Values{"query": {"CodigoAbreviacion:" + codigo + ",Activo:true,TipoParametroId.CodigoAbreviacion:" + tipoCodigo + ",TipoParametroId.Activo:true,TipoParametroId.AreaTipoId.CodigoAbreviacion:PSGA,TipoParametroId.AreaTipoId.Activo:true"}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(ctx, paramURL+"parametro?"+query.Encode(), &raw); err != nil {
 		return 0, falloGrado(http.StatusServiceUnavailable, "No se pudo resolver "+codigo)
@@ -224,12 +238,31 @@ func fechaGradoServidor(s string) (time.Time, error) {
 	return time.Time{}, errors.New("fecha inválida")
 }
 
-func vigenteGrado(desde, hasta string, ahora time.Time) bool {
-	inicio, err := fechaGradoServidor(desde)
+func fechaEventoGrado(s string) (time.Time, error) {
+	if s == "" || strings.HasPrefix(s, "0001-") {
+		return time.Time{}, errors.New("fecha y hora de evento ausentes")
+	}
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t, nil
+	}
+	bogota, err := time.LoadLocation("America/Bogota")
+	if err != nil {
+		return time.Time{}, err
+	}
+	for _, formato := range []string{"2006-01-02T15:04:05.999999999", "2006-01-02 15:04:05.999999999"} {
+		if t, err := time.ParseInLocation(formato, s, bogota); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, errors.New("fecha y hora de evento inválidas")
+}
+
+func vigenteEventoGrado(desde, hasta string, ahora time.Time) bool {
+	inicio, err := fechaEventoGrado(desde)
 	if err != nil {
 		return false
 	}
-	fin, err := fechaGradoServidor(hasta)
+	fin, err := fechaEventoGrado(hasta)
 	return err == nil && !fin.Before(inicio) && !ahora.Before(inicio) && !ahora.After(fin)
 }
 
@@ -237,38 +270,9 @@ func resolverProgramaGrado(ctx context.Context, terceroID, programaID int) (*pro
 	if programaID <= 0 {
 		return nil, falloGrado(http.StatusBadRequest, "Programa obligatorio")
 	}
-	paramURL, err := baseGrado("UrlcrudParametros")
+	vinculos, err := vinculacionesEstudianteGrado(ctx, terceroID)
 	if err != nil {
 		return nil, err
-	}
-	var paramRaw json.RawMessage
-	query := url.Values{"query": {"CodigoAbreviacion:EST,TipoParametroId.CodigoAbreviacion:TV,Activo:true"}, "limit": {"100"}}
-	if _, err := request.GetWithContext(ctx, paramURL+"parametro?"+query.Encode(), &paramRaw); err != nil {
-		return nil, falloGrado(503, "Vinculación estudiantil no verificable")
-	}
-	tipos, err := listaGrado[struct {
-		Id int `json:"Id"`
-	}](paramRaw)
-	if err != nil || len(tipos) != 1 || tipos[0].Id <= 0 {
-		return nil, falloGrado(503, "Tipo de vinculación estudiantil ambiguo")
-	}
-	tercerosURL, err := baseGrado("UrlTercerosCrud")
-	if err != nil {
-		return nil, err
-	}
-	q := url.Values{"query": {fmt.Sprintf("TerceroPrincipalId.Id:%d,TipoVinculacionId:%d,Activo:true", terceroID, tipos[0].Id)}, "limit": {"100"}}
-	var raw json.RawMessage
-	if _, err := request.GetWithContext(ctx, tercerosURL+"vinculacion?"+q.Encode(), &raw); err != nil {
-		return nil, falloGrado(503, "No se pudo verificar la vinculación")
-	}
-	vinculos, err := listaGrado[struct {
-		DependenciaId          int    `json:"DependenciaId"`
-		Activo                 bool   `json:"Activo"`
-		FechaInicioVinculacion string `json:"FechaInicioVinculacion"`
-		FechaFinVinculacion    string `json:"FechaFinVinculacion"`
-	}](raw)
-	if err != nil {
-		return nil, falloGrado(503, "Vinculación inválida")
 	}
 	proyectosURL, err := baseGrado("UrlProyectoAcademico")
 	if err != nil {
@@ -276,22 +280,7 @@ func resolverProgramaGrado(ctx context.Context, terceroID, programaID int) (*pro
 	}
 	var encontrado *programaGrado
 	for _, v := range vinculos {
-		if !v.Activo || v.DependenciaId <= 0 {
-			continue
-		}
-		if v.FechaInicioVinculacion != "" && !strings.HasPrefix(v.FechaInicioVinculacion, "0001-") {
-			d, e := fechaGradoServidor(v.FechaInicioVinculacion)
-			if e != nil || time.Now().Before(d) {
-				continue
-			}
-		}
-		if v.FechaFinVinculacion != "" && !strings.HasPrefix(v.FechaFinVinculacion, "0001-") {
-			d, e := fechaGradoServidor(v.FechaFinVinculacion)
-			if e != nil || time.Now().After(d) {
-				continue
-			}
-		}
-		q := url.Values{"query": {fmt.Sprintf("DependenciaId:%d,Activo:true", v.DependenciaId)}, "limit": {"100"}}
+		q := url.Values{"query": {fmt.Sprintf("DependenciaId:%d,Activo:true", v.DependenciaId)}, "limit": {"0"}}
 		var proyectosRaw json.RawMessage
 		if _, err := request.GetWithContext(ctx, proyectosURL+"proyecto_academico_institucion?"+q.Encode(), &proyectosRaw); err != nil {
 			return nil, falloGrado(503, "No se pudo validar el programa")
@@ -327,7 +316,7 @@ func resolverCodigoPrograma(ctx context.Context, terceroID, dependenciaOikosID i
 	if err != nil {
 		return "", err
 	}
-	q := url.Values{"query": {fmt.Sprintf("Activo:true,TerceroId.Id:%d,TipoDocumentoId.CodigoAbreviacion:CODE", terceroID)}, "limit": {"100"}}
+	q := url.Values{"query": {fmt.Sprintf("Activo:true,TerceroId.Id:%d,TipoDocumentoId.CodigoAbreviacion:CODE", terceroID)}, "limit": {"0"}}
 	var raw json.RawMessage
 	if _, err := request.GetWithContext(ctx, tercerosURL+"datos_identificacion?"+q.Encode(), &raw); err != nil {
 		return "", falloGrado(503, "No se pudieron consultar los códigos estudiantiles")
@@ -338,7 +327,7 @@ func resolverCodigoPrograma(ctx context.Context, terceroID, dependenciaOikosID i
 			Id int `json:"Id"`
 		} `json:"TerceroId"`
 	}](raw)
-	if err != nil || len(identificaciones) == 0 || len(identificaciones) >= 100 {
+	if err != nil || len(identificaciones) == 0 {
 		return "", falloGrado(503, "Códigos estudiantiles ausentes o incompletos")
 	}
 	wsURL, err := baseGrado("UrlcrudWSO2")
@@ -372,7 +361,7 @@ func resolverCodigoPrograma(ctx context.Context, terceroID, dependenciaOikosID i
 		status, err := request.GetWithContext(ctx, wsURL+academica+"/datos_estudiante/"+url.PathEscape(codigo), &estudiante)
 		if status == 404 {
 			continue
-		} // Identificación CODE histórica sin registro académico.
+		} // El código CODE no tiene registro académico consultable.
 		if err != nil {
 			return "", falloGrado(503, "No se pudo verificar la carrera de un código estudiantil")
 		}
@@ -402,22 +391,44 @@ func resolverCodigoPrograma(ctx context.Context, terceroID, dependenciaOikosID i
 	return correspondiente, nil
 }
 
-func eventosGrado(ctx context.Context, programa *programaGrado, periodoID int) (eventoGrado, eventoGrado, error) {
-	var cero eventoGrado
-	if periodoID <= 0 || programa.NivelFormacionId == nil {
-		return cero, cero, falloGrado(400, "Periodo o nivel inválido")
+func nivelRaizGrado(programa *programaGrado) (*nivelGrado, error) {
+	if programa == nil || programa.NivelFormacionId == nil {
+		return nil, falloGrado(503, "El programa no tiene nivel de formación verificable")
 	}
 	nivel := programa.NivelFormacionId
 	visitados := make(map[int]bool)
-	for nivel.NivelFormacionPadreId != nil {
-		if visitados[nivel.Id] {
-			return cero, cero, falloGrado(503, "Jerarquía de formación inválida")
+	for {
+		if nivel.Id <= 0 || visitados[nivel.Id] {
+			return nil, falloGrado(503, "Jerarquía de formación inválida")
 		}
 		visitados[nivel.Id] = true
+		if nivel.NivelFormacionPadreId == nil {
+			return nivel, nil
+		}
 		nivel = nivel.NivelFormacionPadreId
 	}
-	if nivel.Id <= 0 {
-		return cero, cero, falloGrado(503, "Nivel de formación inválido")
+}
+
+func categoriaProgramaGrado(programa *programaGrado) (string, error) {
+	raiz, err := nivelRaizGrado(programa)
+	if err != nil {
+		return "", err
+	}
+	categoria := strings.ToUpper(strings.TrimSpace(raiz.CodigoAbreviacion))
+	if categoria != "PRE" && categoria != "POS" {
+		return "", falloGrado(503, "La raíz del nivel de formación no es PRE ni POS")
+	}
+	return categoria, nil
+}
+
+func eventosGrado(ctx context.Context, programa *programaGrado, periodoID int) (eventoGrado, eventoGrado, error) {
+	var cero eventoGrado
+	if periodoID <= 0 {
+		return cero, cero, falloGrado(400, "Periodo inválido")
+	}
+	nivel, err := nivelRaizGrado(programa)
+	if err != nil {
+		return cero, cero, err
 	}
 	calURL, err := baseGrado("UrlCalendarioMid")
 	if err != nil {
@@ -459,8 +470,8 @@ func eventosGrado(ctx context.Context, programa *programaGrado, periodoID int) (
 		return cero, cero, falloGrado(503, "Eventos de Grado ausentes o ambiguos")
 	}
 	for _, ev := range []eventoGrado{ins[0], apr[0]} {
-		d, e := fechaGradoServidor(ev.FechaInicioEvento)
-		f, e2 := fechaGradoServidor(ev.FechaFinEvento)
+		d, e := fechaEventoGrado(ev.FechaInicioEvento)
+		f, e2 := fechaEventoGrado(ev.FechaFinEvento)
 		if e != nil || e2 != nil || f.Before(d) {
 			return cero, cero, falloGrado(503, "Fechas de Calendario inválidas")
 		}
@@ -469,15 +480,22 @@ func eventosGrado(ctx context.Context, programa *programaGrado, periodoID int) (
 }
 
 func validarVentana(ins, apr eventoGrado, primera bool) error {
-	now := time.Now()
-	if !vigenteGrado(apr.FechaInicioEvento, apr.FechaFinEvento, now) {
-		if inicio, err := fechaGradoServidor(apr.FechaInicioEvento); err == nil && now.Before(inicio) {
+	bogota, err := time.LoadLocation("America/Bogota")
+	if err != nil {
+		return falloGrado(http.StatusServiceUnavailable, "Zona horaria de Bogotá no disponible")
+	}
+	now := time.Now().In(bogota)
+	if primera {
+		if !vigenteEventoGrado(ins.FechaInicioEvento, ins.FechaFinEvento, now) {
+			return falloGrado(409, "La inscripción a grado no está abierta")
+		}
+		return nil
+	}
+	if !vigenteEventoGrado(apr.FechaInicioEvento, apr.FechaFinEvento, now) {
+		if inicio, err := fechaEventoGrado(apr.FechaInicioEvento); err == nil && now.Before(inicio) {
 			return falloGrado(409, "Los tiempos de aprobación aún no han iniciado")
 		}
 		return falloGrado(409, "Los tiempos de aprobación se han cerrado")
-	}
-	if primera && !vigenteGrado(ins.FechaInicioEvento, ins.FechaFinEvento, now) {
-		return falloGrado(409, "La inscripción a grado no está abierta")
 	}
 	return nil
 }
@@ -684,11 +702,11 @@ func GuardarBorradorGrado(ctx context.Context, auth string, id, terceroID int, c
 	if resp.Data.Solicitud.CodigoEstudiante != codigo {
 		return nil, falloGrado(409, "El borrador tiene un código estudiantil de otro programa; requiere corrección")
 	}
-	_, apr, err := eventosGrado(user.Ctx, programa, resp.Data.Solicitud.PeriodoId)
+	ins, apr, err := eventosGrado(user.Ctx, programa, resp.Data.Solicitud.PeriodoId)
 	if err != nil {
 		return nil, err
 	}
-	if err := validarVentana(eventoGrado{}, apr, false); err != nil {
+	if err := validarVentana(ins, apr, resp.Data.Formulario.Version == 1); err != nil {
 		return nil, err
 	}
 	actualizacion := url.Values{"tercero_id": {strconv.Itoa(user.TerceroID)}, "estado_borrador_id": {strconv.Itoa(estado)}}
