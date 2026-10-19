@@ -183,7 +183,7 @@ func dependenciasFacultadesGradoPermitiendoVacio(ctx context.Context, facultades
 }
 
 func resolverDependenciasFacultadesGrado(ctx context.Context, facultades []int, permitirVacio bool) ([]int, error) {
-	base, err := baseOikosGradoV2()
+	base, err := baseGrado("UrlcrudOikos")
 	if err != nil {
 		return nil, err
 	}
