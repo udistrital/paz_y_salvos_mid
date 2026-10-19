@@ -10,25 +10,11 @@ import (
 	"github.com/udistrital/utils_oas/v2/request"
 )
 
-func baseOikosGradoV2() (string, error) {
-	base, err := baseGrado("UrlcrudOikos")
-	if err != nil {
-		return "", err
-	}
-	base = strings.TrimSuffix(base, "/")
-	if strings.HasSuffix(base, "/v1") {
-		base = strings.TrimSuffix(base, "/v1")
-	} else if strings.HasSuffix(base, "/v2") {
-		base = strings.TrimSuffix(base, "/v2")
-	}
-	return base + "/v2/", nil
-}
-
 // facultadLaboratoriosGrado obtiene la facultad desde Oikos. Una vinculación
 // puede apuntar directamente a una facultad (272) aun si esta tiene un padre
 // administrativo; en los demás casos se exige una única relación padre-hija.
 func facultadLaboratoriosGrado(ctx context.Context, dependenciaID int) (int, error) {
-	base, err := baseOikosGradoV2()
+	base, err := baseGrado("UrlcrudOikos")
 	if err != nil {
 		return 0, err
 	}

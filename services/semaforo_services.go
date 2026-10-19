@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +18,40 @@ const authorizationContextKey = "Authorization"
 
 func externalRequestContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, authorizationContextKey, "")
+}
+
+// La respuesta v2 conserva Id/Nombre, pero además permite verificar que la
+// dependencia consultada existe y está activa antes de usarla como alcance.
+func dependenciaOikosSemaforo(ctx context.Context, base string, id int) (models.DependenciaOikosV2, error) {
+	var dependencia models.DependenciaOikosV2
+	if id <= 0 {
+		return dependencia, falloGrado(http.StatusServiceUnavailable, "Dependencia Oikos inválida")
+	}
+	if _, err := request.GetWithContext(ctx, base+"dependencia/"+strconv.Itoa(id), &dependencia); err != nil ||
+		dependencia.Id != id || !dependencia.Activo || strings.TrimSpace(dependencia.Nombre) == "" {
+		return dependencia, falloGrado(http.StatusServiceUnavailable, "Dependencia Oikos no verificable")
+	}
+	return dependencia, nil
+}
+
+func nombreFacultadOikosSemaforo(nombre string) bool {
+	nombre = strings.ToUpper(strings.TrimSpace(nombre))
+	return nombre == "FACULTAD" || strings.HasPrefix(nombre, "FACULTAD ")
+}
+
+func facultadLaboratorioSemaforo(ctx context.Context, base string, laboratorio int) (models.DependenciaOikosV2, error) {
+	relacion, err := relacionFacultadDependenciaGrado(ctx, laboratorio)
+	if err != nil {
+		return models.DependenciaOikosV2{}, err
+	}
+	facultad, err := dependenciaOikosSemaforo(ctx, base, relacion.PadreId.Id)
+	if err != nil {
+		return facultad, err
+	}
+	if !nombreFacultadOikosSemaforo(facultad.Nombre) {
+		return facultad, falloGrado(http.StatusServiceUnavailable, "Facultad de Laboratorios no verificable")
+	}
+	return facultad, nil
 }
 
 // ConsultarSemaforosAsistente consulta los proyectos donde el usuario es asistente y retorna los semáforos de esos proyectos
@@ -52,6 +87,10 @@ func ConsultarSemaforosAsistente(ctx context.Context, cedula string, limit int, 
 		}
 		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "El asistente no tiene proyectos asignados.", Data: resp}
 	}
+	oikos, err := baseGrado("UrlcrudOikos")
+	if err != nil {
+		return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "Servicio Oikos no configurado.", Data: nil}
+	}
 
 	// Homologa cada código académico a la dependencia Oikos correspondiente.
 	var idsOikos []int
@@ -71,12 +110,11 @@ func ConsultarSemaforosAsistente(ctx context.Context, cedula string, limit int, 
 		if idOikos > 0 {
 			// Cada dependencia Oikos aparece una sola vez en el resultado.
 			if _, existe := proyectosMap[idOikos]; !existe {
-				idsOikos = append(idsOikos, idOikos)
-				urlOikos := helpers.ConfigString("UrlcrudOikos") + "dependencia/" + fmt.Sprintf("%d", idOikos)
-				var resOikos models.DependenciaOikos
-				if _, err := request.GetWithContext(ctx, urlOikos, &resOikos); err != nil {
-					logs.Warn("No se pudo obtener información del proyecto %d: %v", idOikos, err)
+				resOikos, err := dependenciaOikosSemaforo(ctx, oikos, idOikos)
+				if err != nil {
+					return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "No se pudo verificar el proyecto en Oikos v2.", Data: nil}
 				}
+				idsOikos = append(idsOikos, idOikos)
 				proyectosMap[idOikos] = models.ProyectoAsignado{
 					IdOikos: idOikos,
 					Codigo:  cod,
@@ -227,6 +265,10 @@ func ConsultarEstudiantesProyecto(ctx context.Context, id_coordinador string, li
 		}
 		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "El coordinador no tiene proyectos asociados.", Data: resp}
 	}
+	oikos, err := baseGrado("UrlcrudOikos")
+	if err != nil {
+		return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "Servicio Oikos no configurado.", Data: nil}
+	}
 
 	// Asocia los proyectos académicos con dependencias Oikos únicas.
 	var idsOikos []int
@@ -247,12 +289,11 @@ func ConsultarEstudiantesProyecto(ctx context.Context, id_coordinador string, li
 		idOikos := resHom.OikosId()
 		if idOikos > 0 {
 			if _, existe := proyectosMap[idOikos]; !existe {
-				idsOikos = append(idsOikos, idOikos)
-				urlOikos := helpers.ConfigString("UrlcrudOikos") + "dependencia/" + fmt.Sprintf("%d", idOikos)
-				var resOikos models.DependenciaOikos
-				if _, err := request.GetWithContext(ctx, urlOikos, &resOikos); err != nil {
-					logs.Warn("No se pudo obtener información del proyecto %d: %v", idOikos, err)
+				resOikos, err := dependenciaOikosSemaforo(ctx, oikos, idOikos)
+				if err != nil {
+					return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "No se pudo verificar el proyecto en Oikos v2.", Data: nil}
 				}
+				idsOikos = append(idsOikos, idOikos)
 				proyectosMap[idOikos] = models.ProyectoAsignado{
 					IdOikos: idOikos,
 					Codigo:  cod,
@@ -389,6 +430,16 @@ func ConsultarEstudiantesFacultad(ctx context.Context, id_secretario string, lim
 	if len(idsOikos) == 0 {
 		return models.APIResponse{Success: false, Status: http.StatusNotFound, Message: "No se encontraron facultades oikos para el secretario.", Data: nil}
 	}
+	oikos, err := baseGrado("UrlcrudOikos")
+	if err != nil {
+		return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "Servicio Oikos no configurado.", Data: nil}
+	}
+	for _, id := range idsOikos {
+		facultad, err := dependenciaOikosSemaforo(ctx, oikos, id)
+		if err != nil || !nombreFacultadOikosSemaforo(facultad.Nombre) {
+			return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "No se pudo verificar la facultad de Secretaría en Oikos v2.", Data: nil}
+		}
+	}
 
 	// Incluye las facultades acreditadas en el filtro de la consulta.
 	var queryParts []string
@@ -444,18 +495,17 @@ func ConsultarEstudiantesFacultadLaboratorios(ctx context.Context, id_coordinado
 		logs.Error("No se pudo obtener las dependencias del jefe %s: %v", id_coordinador_lab, err)
 		return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "No se pudo consultar las dependencias del jefe de laboratorios.", Data: nil}
 	}
+	oikos, err := baseGrado("UrlcrudOikos")
+	if err != nil {
+		return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "Servicio Oikos no configurado.", Data: nil}
+	}
 
 	var dependenciasConNombre []models.DependenciaConNombre
 
 	for _, jefe := range resJefe {
-		urlDep :=
-			helpers.ConfigString("UrlcrudOikos") +
-				"dependencia/" + fmt.Sprintf("%d", jefe.DependenciaId)
-
-		var resDep models.DependenciaOikos
-		if _, err := request.GetWithContext(ctx, urlDep, &resDep); err != nil {
-			logs.Warn("No se pudo obtener información de la dependencia %d: %v", jefe.DependenciaId, err)
-			continue
+		resDep, err := dependenciaOikosSemaforo(ctx, oikos, jefe.DependenciaId)
+		if err != nil {
+			return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "No se pudo verificar una dependencia en Oikos v2.", Data: nil}
 		}
 
 		dependenciasConNombre = append(dependenciasConNombre, models.DependenciaConNombre{
@@ -478,6 +528,9 @@ func ConsultarEstudiantesFacultadLaboratorios(ctx context.Context, id_coordinado
 		// Acota el semáforo a las dependencias asociadas al jefe.
 		var idsDependencias []int
 		for _, dep := range dependenciasConNombre {
+			if !nombreFacultadOikosSemaforo(dep.Nombre) {
+				return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "Facultad del funcionario no verificable en Oikos v2.", Data: nil}
+			}
 			idsDependencias = append(idsDependencias, dep.DependenciaId)
 		}
 		if len(idsDependencias) == 0 {
@@ -534,24 +587,15 @@ func ConsultarEstudiantesFacultadLaboratorios(ctx context.Context, id_coordinado
 				continue
 			}
 
-			// Consulta la relación padre de la dependencia de laboratorio.
-			urlLabDep :=
-				helpers.ConfigString("UrlcrudOikos") +
-					"dependencia_padre/?query=Hija:" + fmt.Sprintf("%d", labId)
-
-			var resLabDep []models.DependenciaPadreOikos
-			if _, err := request.GetWithContext(ctx, urlLabDep, &resLabDep); err != nil {
-				logs.Warn("No se pudo obtener información completa del laboratorio %d: %v", labId, err)
-				continue
+			// Una sola relación activa por laboratorio; una respuesta ambigua no concede ámbito.
+			facultad, err := facultadLaboratorioSemaforo(ctx, oikos, labId)
+			if err != nil {
+				return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "No se pudo verificar la facultad del laboratorio en Oikos v2.", Data: nil}
 			}
-
-			for _, relacion := range resLabDep {
-				facultadId := relacion.Padre.Id
-				if facultadId > 0 && !facultadesMap[facultadId] {
-					facultadesMap[facultadId] = true
-					facultadesOikos = append(facultadesOikos, facultadId)
-					logs.Info("Facultad padre encontrada: ID %d (%s) para laboratorio ID %d", facultadId, relacion.Padre.Nombre, labId)
-				}
+			if !facultadesMap[facultad.Id] {
+				facultadesMap[facultad.Id] = true
+				facultadesOikos = append(facultadesOikos, facultad.Id)
+				logs.Info("Facultad padre encontrada: ID %d (%s) para laboratorio ID %d", facultad.Id, facultad.Nombre, labId)
 			}
 		}
 
@@ -644,7 +688,10 @@ func obtenerSemaforos(ctx context.Context, query, notFoundMsg string) models.API
 	}
 
 	// Completa los nombres de estudiante, facultad y proyecto de la página.
-	tabla := consultarDataSemaforo(ctx, semaforos)
+	tabla, err := consultarDataSemaforo(ctx, semaforos)
+	if err != nil {
+		return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "Servicio Oikos no configurado.", Data: nil}
+	}
 
 	// Adjunta el total y el tamaño de la página al listado.
 	result := models.SemaforosResponse{
@@ -697,7 +744,10 @@ func obtenerSemaforosConFacultad(ctx context.Context, query, notFoundMsg string,
 		totalCount = len(resCount.Data)
 	}
 
-	tabla := consultarDataSemaforo(ctx, semaforos)
+	tabla, err := consultarDataSemaforo(ctx, semaforos)
+	if err != nil {
+		return models.APIResponse{Success: false, Status: http.StatusServiceUnavailable, Message: "Servicio Oikos no configurado.", Data: nil}
+	}
 
 	result := models.SemaforosFacultadResponse{
 		SemaforosResponse: models.SemaforosResponse{
@@ -711,8 +761,12 @@ func obtenerSemaforosConFacultad(ctx context.Context, query, notFoundMsg string,
 	return models.APIResponse{Success: true, Status: http.StatusOK, Message: "Consulta exitosa", Data: result}
 }
 
-func consultarDataSemaforo(ctx context.Context, semaforos []models.Semaforo) []models.SemaforoTable {
+func consultarDataSemaforo(ctx context.Context, semaforos []models.Semaforo) ([]models.SemaforoTable, error) {
 	var result []models.SemaforoTable
+	oikos, err := baseGrado("UrlcrudOikos")
+	if err != nil {
+		return nil, err
+	}
 
 	for _, s := range semaforos {
 		var nombreFacultad, nombreProyecto, nombreEstudiante string
@@ -730,24 +784,14 @@ func consultarDataSemaforo(ctx context.Context, semaforos []models.Semaforo) []m
 		}
 
 		// 2. Nombre de la facultad
-		urlFac :=
-			helpers.ConfigString("UrlcrudOikos") +
-				"dependencia/" + fmt.Sprintf("%d", s.IdFacultadOikos)
-
-		var resFac models.DependenciaOikos
-		if _, err := request.GetWithContext(ctx, urlFac, &resFac); err != nil {
+		if resFac, err := dependenciaOikosSemaforo(ctx, oikos, int(s.IdFacultadOikos)); err != nil {
 			logs.Warn("No se pudo obtener nombre de la facultad %d: %v", s.IdFacultadOikos, err)
 		} else {
 			nombreFacultad = resFac.Nombre
 		}
 
 		// Obtiene el nombre del proyecto curricular desde Oikos.
-		urlProj :=
-			helpers.ConfigString("UrlcrudOikos") +
-				"dependencia/" + fmt.Sprintf("%d", s.IdProyectoOikos)
-
-		var resProj models.DependenciaOikos
-		if _, err := request.GetWithContext(ctx, urlProj, &resProj); err != nil {
+		if resProj, err := dependenciaOikosSemaforo(ctx, oikos, int(s.IdProyectoOikos)); err != nil {
 			logs.Warn("No se pudo obtener nombre del proyecto %d: %v", s.IdProyectoOikos, err)
 		} else {
 			nombreProyecto = resProj.Nombre
@@ -777,5 +821,5 @@ func consultarDataSemaforo(ctx context.Context, semaforos []models.Semaforo) []m
 		})
 	}
 
-	return result
+	return result, nil
 }
