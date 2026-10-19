@@ -158,7 +158,7 @@ func proyectosCoordinacionGrado(actor *identidadPazSalvoGrado, perfil string) (m
 }
 
 func relacionFacultadDependenciaGrado(ctx context.Context, dependencia int) (*models.DependenciaPadreOikosV2, error) {
-	base, err := baseOikosGradoV2()
+	base, err := baseGrado("UrlcrudOikos")
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +181,7 @@ func facultadDependenciaGrado(ctx context.Context, dependencia int) (int, error)
 		return relacion.PadreId.Id, nil
 	}
 
-	base, baseErr := baseOikosGradoV2()
+	base, baseErr := baseGrado("UrlcrudOikos")
 	if baseErr != nil {
 		return 0, err
 	}
@@ -290,7 +290,7 @@ func facultadesLaboratoriosGrado(actor *identidadPazSalvoGrado) (map[int]bool, e
 	}
 	if len(coordinadores) > 0 {
 		// Verificar que el destino del mapeo sea realmente una facultad institucional.
-		oikos, err := baseOikosGradoV2()
+		oikos, err := baseGrado("UrlcrudOikos")
 		if err != nil {
 			return nil, err
 		}
@@ -351,7 +351,7 @@ func facultadUsuarioPazSalvosGrado(actor *identidadPazSalvoGrado, perfil string)
 	for id := range facultades {
 		facultadID = id
 	}
-	oikos, err := baseOikosGradoV2()
+	oikos, err := baseGrado("UrlcrudOikos")
 	if err != nil {
 		return nil, err
 	}
@@ -574,7 +574,7 @@ func filtrosPazSalvosGrado(actor *identidadPazSalvoGrado, dependencias []int) (*
 			dependenciasPrograma[programa.DependenciaId] = true
 		}
 	}
-	oikos, err := baseOikosGradoV2()
+	oikos, err := baseGrado("UrlcrudOikos")
 	if err != nil {
 		return nil, err
 	}
