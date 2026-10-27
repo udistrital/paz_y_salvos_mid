@@ -264,6 +264,14 @@ func estadosSolicitudRevisionGrado(ctx context.Context) (map[string]int, error) 
 }
 
 func validarVentanaAprobacionPazSalvoGrado(ctx context.Context, solicitud models.SolicitudGrado) error {
+	return validarVentanaSolicitudGrado(ctx, solicitud, false)
+}
+
+func validarVentanaInscripcionRevisionGrado(ctx context.Context, solicitud models.SolicitudGrado) error {
+	return validarVentanaSolicitudGrado(ctx, solicitud, true)
+}
+
+func validarVentanaSolicitudGrado(ctx context.Context, solicitud models.SolicitudGrado, inscripcionVigente bool) error {
 	if solicitud.CalendarioEventoAprobacionId <= 0 {
 		return falloGrado(http.StatusConflict, "La solicitud no tiene asociado el evento de aprobación de Paz y Salvos")
 	}
@@ -291,7 +299,7 @@ func validarVentanaAprobacionPazSalvoGrado(ctx context.Context, solicitud models
 	if inscripcion.EventoId != solicitud.CalendarioEventoInscripcionId {
 		return falloGrado(http.StatusConflict, "La configuración de inscripción cambió; la solicitud requiere revisión")
 	}
-	if err := validarVentana(inscripcion, aprobacion, false); err != nil {
+	if err := validarVentana(inscripcion, aprobacion, inscripcionVigente); err != nil {
 		if fallo, ok := err.(*ErrorInscripcionGrado); ok && fallo.Status == http.StatusConflict &&
 			fallo.Mensaje == "Los tiempos de aprobación se han cerrado" {
 			return falloGrado(http.StatusConflict, "Los tiempos de aprobación para el programa académico "+strings.TrimSpace(programas[0].Nombre)+" se han cerrado")
@@ -703,7 +711,7 @@ func RevisarDocumentacionSecretariaGrado(ctx context.Context, auth string, id in
 		len(borrador.Soportes) != len(entrada.Soportes) {
 		return nil, falloGrado(http.StatusConflict, "La versión radicada cambió")
 	}
-	if err := validarVentanaAprobacionPazSalvoGrado(secretaria.Ctx, borrador.Solicitud); err != nil {
+	if err := validarVentanaInscripcionRevisionGrado(secretaria.Ctx, borrador.Solicitud); err != nil {
 		return nil, err
 	}
 	estadoObservado, err := resolverParametroGrado(secretaria.Ctx, "EST_SOP_GRADO", "SD_OBSERVADO")
